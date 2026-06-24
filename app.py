@@ -38,7 +38,8 @@ FONT_URLS = {
     "Chilanka (Malayalam)": "https://github.com/google/fonts/raw/main/ofl/chilanka/Chilanka-Regular.ttf",
     "Galada (Bengali)": "https://github.com/google/fonts/raw/main/ofl/galada/Galada-Regular.ttf",
     "Peddana (Telugu)": "https://github.com/google/fonts/raw/main/ofl/peddana/Peddana-Regular.ttf",
-    "Mogra (Gujarati)": "https://github.com/google/fonts/raw/main/ofl/mogra/Mogra-Regular.ttf"
+    "Mogra (Gujarati)": "https://github.com/google/fonts/raw/main/ofl/mogra/Mogra-Regular.ttf",
+    "Hubballi (Kannada)": "https://github.com/google/fonts/raw/main/ofl/hubballi/Hubballi-Regular.ttf"
 }
 
 @st.cache_resource

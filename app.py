@@ -11,8 +11,9 @@ st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="ð
 
 # --- UTILS FOR FONTS ---
 FONT_URLS = {
+    # Latin / English
     "Homemade Apple": "https://github.com/google/fonts/raw/main/apache/homemadeapple/HomemadeApple-Regular.ttf",
-    "Caveat": "https://github.com/google/fonts/raw/main/ofl/caveat/Caveat%5Bwght%5D.ttf",
+    "Caveat (Latin/Cyrillic)": "https://github.com/google/fonts/raw/main/ofl/caveat/Caveat%5Bwght%5D.ttf",
     "Indie Flower": "https://github.com/google/fonts/raw/main/ofl/indieflower/IndieFlower-Regular.ttf",
     "Patrick Hand": "https://github.com/google/fonts/raw/main/ofl/patrickhand/PatrickHand-Regular.ttf",
     "Dancing Script": "https://github.com/google/fonts/raw/main/ofl/dancingscript/DancingScript%5Bwght%5D.ttf",
@@ -20,9 +21,17 @@ FONT_URLS = {
     "Shadows Into Light": "https://github.com/google/fonts/raw/main/ofl/shadowsintolight/ShadowsIntoLight-Regular.ttf",
     "Architects Daughter": "https://github.com/google/fonts/raw/main/ofl/architectsdaughter/ArchitectsDaughter-Regular.ttf",
     "Pacifico": "https://github.com/google/fonts/raw/main/ofl/pacifico/Pacifico-Regular.ttf",
-    "Kalam": "https://github.com/google/fonts/raw/main/ofl/kalam/Kalam-Regular.ttf",
-    "Gochi Hand": "https://github.com/google/fonts/raw/main/ofl/gochihand/GochiHand-Regular.ttf",
-    "Just Another Hand": "https://github.com/google/fonts/raw/main/ofl/justanotherhand/JustAnotherHand-Regular.ttf"
+    
+    # Multilingual & International
+    "Kalam (Latin/Devanagari)": "https://github.com/google/fonts/raw/main/ofl/kalam/Kalam-Regular.ttf",
+    "Tillana (Devanagari/Hindi)": "https://github.com/google/fonts/raw/main/ofl/tillana/Tillana-Regular.ttf",
+    "Yatra One (Devanagari/Hindi)": "https://github.com/google/fonts/raw/main/ofl/yatraone/YatraOne-Regular.ttf",
+    "Aref Ruqaa (Arabic)": "https://github.com/google/fonts/raw/main/ofl/arefruqaa/ArefRuqaa-Regular.ttf",
+    "Nanum Pen Script (Korean)": "https://github.com/google/fonts/raw/main/ofl/nanumpenscript/NanumPenScript-Regular.ttf",
+    "Zhi Mang Xing (Chinese)": "https://github.com/google/fonts/raw/main/ofl/zhimangxing/ZhiMangXing-Regular.ttf",
+    "Yuji Boku (Japanese)": "https://github.com/google/fonts/raw/main/ofl/yujiboku/YujiBoku-Regular.ttf",
+    "Neucha (Cyrillic/Russian)": "https://github.com/google/fonts/raw/main/ofl/neucha/Neucha.ttf",
+    "Bad Script (Cyrillic/Russian)": "https://github.com/google/fonts/raw/main/ofl/badscript/BadScript-Regular.ttf"
 }
 
 @st.cache_resource

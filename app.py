@@ -5,7 +5,7 @@ import os
 st.set_page_config(page_title="Text to Handwriting", layout="wide")
 
 # Path to the directory containing index.html
-frontend_dir = os.path.dirname(os.path.abspath(__file__))
+frontend_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), "frontend")
 
 # declare_component serves the directory and renders index.html
 # It automatically handles CSS, JS, and image relative paths!

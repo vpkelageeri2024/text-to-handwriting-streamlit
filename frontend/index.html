@@ -532,16 +532,27 @@
       });
     </script>
     <script>
+      function initStreamlit() {
+        if (window.parent && window.parent !== window) {
+          // Tell Streamlit the component is ready
+          window.parent.postMessage({
+            isStreamlitMessage: true,
+            type: "streamlit:setComponentReady",
+            apiVersion: 1
+          }, "*");
+          setStreamlitHeight();
+        }
+      }
       function setStreamlitHeight() {
         if (window.parent && window.parent !== window) {
           window.parent.postMessage({
             isStreamlitMessage: true,
-            type: "setFrameHeight",
+            type: "streamlit:setFrameHeight",
             height: document.documentElement.scrollHeight
           }, "*");
         }
       }
-      window.addEventListener("load", setStreamlitHeight);
+      window.addEventListener("load", initStreamlit);
       window.addEventListener("resize", setStreamlitHeight);
       const observer = new MutationObserver(setStreamlitHeight);
       observer.observe(document.body, { attributes: true, childList: true, subtree: true });

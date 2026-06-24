@@ -31,7 +31,14 @@ FONT_URLS = {
     "Zhi Mang Xing (Chinese)": "https://github.com/google/fonts/raw/main/ofl/zhimangxing/ZhiMangXing-Regular.ttf",
     "Yuji Boku (Japanese)": "https://github.com/google/fonts/raw/main/ofl/yujiboku/YujiBoku-Regular.ttf",
     "Neucha (Cyrillic/Russian)": "https://github.com/google/fonts/raw/main/ofl/neucha/Neucha.ttf",
-    "Bad Script (Cyrillic/Russian)": "https://github.com/google/fonts/raw/main/ofl/badscript/BadScript-Regular.ttf"
+    "Bad Script (Cyrillic/Russian)": "https://github.com/google/fonts/raw/main/ofl/badscript/BadScript-Regular.ttf",
+    
+    # Indian Languages
+    "Kavivanar (Tamil)": "https://github.com/google/fonts/raw/main/ofl/kavivanar/Kavivanar-Regular.ttf",
+    "Chilanka (Malayalam)": "https://github.com/google/fonts/raw/main/ofl/chilanka/Chilanka-Regular.ttf",
+    "Galada (Bengali)": "https://github.com/google/fonts/raw/main/ofl/galada/Galada-Regular.ttf",
+    "Peddana (Telugu)": "https://github.com/google/fonts/raw/main/ofl/peddana/Peddana-Regular.ttf",
+    "Mogra (Gujarati)": "https://github.com/google/fonts/raw/main/ofl/mogra/Mogra-Regular.ttf"
 }
 
 @st.cache_resource

@@ -116,29 +116,87 @@ def render_handwriting(text, font_name, font_size, ink_color, paper_style, messi
     return images
 
 # --- UI ---
-st.title("📝 Text to Handwriting (Python Engine)")
+st.markdown("""
+<style>
+    .stApp {
+        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
+        color: #1f2937;
+    }
+    .main-title {
+        text-align: center;
+        font-family: 'Helvetica Neue', sans-serif;
+        font-size: 3.5rem;
+        font-weight: 800;
+        color: #fff;
+        text-shadow: 2px 2px 0px #ff6b6b, 4px 4px 0px #4ecdc4, 6px 6px 0px #45b7d1;
+        margin-bottom: 2rem;
+    }
+</style>
+""", unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 2])
+st.markdown("<div class='main-title'>Text to Handwriting</div>", unsafe_allow_html=True)
+
+# 1. INPUT AT FIRST
+st.header("1. Input Text")
+text_input = st.text_area("Type or paste your text here...", height=200, value="Write something nice here...")
+
+# Page Estimator
+estimated_pages = math.ceil(len(text_input) / 1500) if text_input else 0
+st.info(f"📄 Estimated Pages: ~{estimated_pages}")
+
+# 2. CUSTOMIZATIONS BELOW
+st.header("2. Customizations")
+col1, col2, col3 = st.columns(3)
 
 with col1:
-    st.header("Customizations")
     font_choice = st.selectbox("Handwriting Font", list(FONT_URLS.keys()))
-    font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
     ink_color = st.color_picker("Ink Color", value="#000f55")
+
+with col2:
     paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "Yellow Legal", "Graph", "Parchment"])
     messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
 
-with col2:
-    st.header("Input Text")
-    text_input = st.text_area("Type or paste your text here...", height=200, value="Write something nice here...")
-    
-    if st.button("Generate Image", use_container_width=True):
-        if not text_input.strip():
-            st.warning("Please enter some text.")
-        else:
-            with st.spinner("Generating handwriting..."):
-                images = render_handwriting(text_input, font_choice, font_size, ink_color, paper_style, messiness)
-                st.session_state['generated_images'] = images
+with col3:
+    font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
+
+st.header("3. Draw Diagram / Signature (Optional)")
+st.write("Draw something below, and it will be appended to the end of your notes!")
+from streamlit_drawable_canvas import st_canvas
+canvas_result = st_canvas(
+    fill_color="rgba(255, 165, 0, 0.3)",
+    stroke_width=2,
+    stroke_color=ink_color,
+    background_color="rgba(0, 0, 0, 0)",
+    height=200,
+    width=800,
+    drawing_mode="freedraw",
+    key="canvas",
+)
+
+if st.button("Generate Image", use_container_width=True):
+    if not text_input.strip() and not canvas_result.image_data.any():
+        st.warning("Please enter some text or draw something.")
+    else:
+        with st.spinner("Generating handwriting..."):
+            images = render_handwriting(text_input, font_choice, font_size, ink_color, paper_style, messiness)
+            
+            # Append diagram if drawn
+            if canvas_result.image_data is not None:
+                # Check if anything was actually drawn by seeing if there are any non-zero pixels
+                import numpy as np
+                if np.any(canvas_result.image_data):
+                    diagram = Image.fromarray(canvas_result.image_data)
+                    # Convert to RGBA
+                    diagram = diagram.convert("RGBA")
+                    # Paste onto the last page or a new page
+                    last_page = images[-1].convert("RGBA")
+                    # We just paste it at the bottom. If it doesn't fit, we should add a new page.
+                    # For simplicity, let's just add it as a new page.
+                    diagram_page = create_background(paper_style, 800, 1131)
+                    diagram_page.paste(diagram, (50, 100), diagram)
+                    images.append(diagram_page.convert("RGB"))
+            
+            st.session_state['generated_images'] = images
 
 if 'generated_images' in st.session_state:
     images = st.session_state['generated_images']

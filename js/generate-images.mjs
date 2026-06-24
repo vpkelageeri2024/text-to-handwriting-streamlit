@@ -47,6 +47,23 @@ export async function generateImages() {
   pageEl.scroll(0, 0);
 
   const paperContentEl = document.querySelector('.page-a .paper-content');
+  
+  function applyJitterToHTML(html) {
+    const messiness = document.querySelector('#messiness').value;
+    if (messiness === 'none') return html;
+    
+    const intensity = messiness === 'high' ? 2 : 1;
+    return html.replace(/(>|^)([^<]+)(<|$)/g, (match, p1, p2, p3) => {
+      const jitteredWords = p2.split(/(\s+)/).map(word => {
+        if (!word.trim()) return word; // preserve spaces intact
+        const rot = (Math.random() * 2 - 1) * intensity * 1.5; // -1.5 to +1.5 deg
+        const dy = (Math.random() * 2 - 1) * intensity * 1; // -1 to +1 px
+        return `<span style="display:inline-block; transform: rotate(${rot}deg) translateY(${dy}px);">${word}</span>`;
+      }).join('');
+      return p1 + jitteredWords + p3;
+    });
+  }
+
   const scrollHeight = paperContentEl.scrollHeight;
   const clientHeight = 514; // height of .paper-content when there is no content
 
@@ -60,33 +77,46 @@ export async function generateImages() {
       );
     }
     const initialPaperContent = paperContentEl.innerHTML;
-    const splitContent = initialPaperContent.split(/(\s+)/);
+    const splitContent = initialPaperContent.split(/(\s+|<br\s*\/?>)/);
 
     // multiple images
     let wordCount = 0;
-    for (let i = 0; i < totalPages; i++) {
-      paperContentEl.innerHTML = '';
-      const wordArray = [];
-      let wordString = '';
-
-      while (
-        paperContentEl.scrollHeight <= clientHeight &&
-        wordCount <= splitContent.length
-      ) {
-        wordString = wordArray.join(' ');
-        wordArray.push(splitContent[wordCount]);
-        paperContentEl.innerHTML = wordArray.join(' ');
-        wordCount++;
+    while (wordCount < splitContent.length) {
+      let low = wordCount;
+      let high = splitContent.length;
+      let best = wordCount;
+      
+      while (low <= high) {
+        let mid = Math.floor((low + high) / 2);
+        paperContentEl.innerHTML = splitContent.slice(wordCount, mid).join('');
+        if (paperContentEl.scrollHeight <= clientHeight) {
+          best = mid;
+          low = mid + 1;
+        } else {
+          high = mid - 1;
+        }
       }
-      paperContentEl.innerHTML = wordString;
-      wordCount--;
+      
+      // best is the maximum index without exceeding height
+      // If a single token is too large, force it to prevent infinite loop
+      if (best === wordCount) {
+        best = wordCount + 1;
+      }
+      
+      const rawHTML = splitContent.slice(wordCount, best).join('');
+      paperContentEl.innerHTML = applyJitterToHTML(rawHTML);
+      wordCount = best;
+      
       pageEl.scrollTo(0, 0);
       await convertDIVToImage();
-      paperContentEl.innerHTML = initialPaperContent;
     }
+    paperContentEl.innerHTML = initialPaperContent;
   } else {
     // single image
+    const initialPaperContent = paperContentEl.innerHTML;
+    paperContentEl.innerHTML = applyJitterToHTML(initialPaperContent);
     await convertDIVToImage();
+    paperContentEl.innerHTML = initialPaperContent;
   }
 
   removePaperStyles();
@@ -132,6 +162,21 @@ export const moveRight = (index) => {
  * Downloads generated images as PDF
  */
 export const downloadAsPDF = () => createPDF(outputImages);
+
+export const downloadAsZIP = () => {
+  if (!outputImages.length) return alert('No images to download');
+  const zip = new JSZip();
+  outputImages.forEach((base64Url, index) => {
+    const base64Data = base64Url.split(',')[1];
+    zip.file(`handwritten-page-${index + 1}.jpeg`, base64Data, { base64: true });
+  });
+  zip.generateAsync({ type: 'blob' }).then((content) => {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(content);
+    a.download = 'handwritten-notes.zip';
+    a.click();
+  });
+};
 
 /**
  * Sets event listeners for close button on output images.

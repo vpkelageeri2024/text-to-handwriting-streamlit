@@ -66,11 +66,13 @@ function renderOutput(outputImages) {
     document.querySelector('#output').innerHTML =
       'Click "Generate Image" Button to generate new image.';
     document.querySelector('#download-as-pdf-button').classList.remove('show');
+    document.querySelector('#download-as-zip-button').classList.remove('show');
     document.querySelector('#delete-all-button').classList.remove('show');
     return;
   }
 
   document.querySelector('#download-as-pdf-button').classList.add('show');
+  document.querySelector('#download-as-zip-button').classList.add('show');
   document.querySelector('#delete-all-button').classList.add('show');
   document.querySelector('#output').innerHTML = outputImages
     .map(

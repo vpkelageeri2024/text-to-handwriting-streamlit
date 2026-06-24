@@ -36,6 +36,8 @@ function drawPoint(x, y) {
 
   if (lastX && lastY && (x !== lastX || y !== lastY)) {
     ctx.lineWidth = 2 * pointSize;
+    ctx.lineCap = 'round';
+    ctx.lineJoin = 'round';
     ctx.beginPath();
     ctx.strokeStyle = inkColor;
     ctx.moveTo(...fixPositions(lastX, lastY));

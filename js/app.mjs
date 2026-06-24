@@ -6,8 +6,13 @@ import {
 import {
   generateImages,
   downloadAsPDF,
-  deleteAll
+  downloadAsZIP,
+  deleteAll,
+  moveLeft,
+  moveRight
 } from './generate-images.mjs';
+
+window.downloadAsZIP = downloadAsZIP;
 import { setInkColor, toggleDrawCanvas } from './utils/draw.mjs';
 
 /**
@@ -96,6 +101,109 @@ const EVENT_MAP = {
       setInkColor(e.target.value);
     }
   },
+  '#pen-type': {
+    on: 'change',
+    action: (e) => {
+      document.body.style.setProperty('--pen-type-filter', e.target.value === 'fountain' ? 'blur(0.5px) contrast(1.2)' : e.target.value === 'gel' ? 'brightness(1.5) contrast(1.5)' : 'none');
+      document.body.style.setProperty('--pen-type-opacity', e.target.value === 'ballpoint' ? '0.85' : '1');
+    }
+  },
+  '#messiness': {
+    on: 'change',
+    action: (e) => {
+      document.body.style.setProperty('--messiness-transform', e.target.value === 'high' ? 'rotate(-1.5deg) translateY(1px)' : e.target.value === 'low' ? 'rotate(0.5deg)' : 'none');
+    }
+  },
+  '#paper-style': {
+    on: 'change',
+    action: (e) => {
+      const pageEl = document.querySelector('.page-a');
+      pageEl.classList.remove('paper-ruled', 'paper-legal', 'paper-graph', 'paper-parchment', 'paper-blank');
+      pageEl.classList.add(`paper-${e.target.value}`);
+    }
+  },
+  '#download-as-zip-button': {
+    on: 'click',
+    action: () => {
+      // Need to invoke zip download logic
+      if (typeof window.downloadAsZIP === 'function') {
+        window.downloadAsZIP();
+      }
+    }
+  },
+  '#note': {
+    on: 'input',
+    action: () => {
+      const paperContentEl = document.querySelector('.page-a .paper-content');
+      const scrollHeight = paperContentEl.scrollHeight;
+      const clientHeight = 514;
+      const pages = Math.ceil(scrollHeight / clientHeight) || 1;
+      const estimateEl = document.getElementById('page-estimate');
+      if (estimateEl) estimateEl.innerText = pages;
+    }
+  },
+  '#import-text-file': {
+    on: 'change',
+    action: (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const text = ev.target.result.replace(/\n/g, '<br/>');
+          const note = document.querySelector('#note');
+          
+          // Clear default dummy text if it's the only thing there
+          if (note.innerHTML.includes('Lorem ipsum')) {
+             note.innerHTML = text;
+          } else {
+             note.innerHTML += (note.innerHTML.endsWith('<br>') || note.innerHTML.endsWith('<br/>') ? '' : '<br/>') + text;
+          }
+          
+          // Reset the input so the same file can be selected again
+          e.target.value = '';
+        };
+        reader.readAsText(file);
+      }
+    }
+  },
+  '#import-image-file': {
+    on: 'change',
+    action: (e) => {
+      const file = e.target.files[0];
+      if (file) {
+        const reader = new FileReader();
+        reader.onload = (ev) => {
+          const img = document.createElement('img');
+          img.src = ev.target.result;
+          img.style.position = 'absolute';
+          img.style.top = '50px';
+          img.style.left = '50px';
+          img.style.maxWidth = '200px';
+          img.style.cursor = 'move';
+          img.style.zIndex = '10';
+          img.onmousedown = function(event) {
+            let shiftX = event.clientX - img.getBoundingClientRect().left;
+            let shiftY = event.clientY - img.getBoundingClientRect().top;
+            function moveAt(pageX, pageY) {
+              const rect = document.querySelector('.page-a').getBoundingClientRect();
+              const scrollTop = document.querySelector('.page-a').scrollTop;
+              img.style.left = pageX - rect.left - shiftX + 'px';
+              img.style.top = pageY - rect.top - shiftY + scrollTop + 'px';
+            }
+            function onMouseMove(event) { moveAt(event.pageX, event.pageY); }
+            document.addEventListener('mousemove', onMouseMove);
+            img.onmouseup = function() {
+              document.removeEventListener('mousemove', onMouseMove);
+              img.onmouseup = null;
+            };
+          };
+          img.ondragstart = function() { return false; };
+          document.querySelector('.page-a').appendChild(img);
+        };
+        reader.readAsDataURL(file);
+      }
+    }
+  },
   '#paper-margin-toggle': {
     on: 'change',
     action: () => {
@@ -179,29 +287,43 @@ document.querySelectorAll('.switch-toggle input').forEach((toggleInput) => {
 });
 
 /**
- * Set GitHub Contributors
+ * Save and Load Presets
  */
+const customInputs = document.querySelectorAll('.customization-col select, .customization-col input[type="number"], .customization-col input[type="checkbox"]');
 
-fetch(
-  'https://api.github.com/repos/saurabhdaware/text-to-handwriting/contributors'
-)
-  .then((res) => res.json())
-  .then((res) => {
-    document.querySelector('#project-contributors').innerHTML = res
-      .map(
-        (contributor) => /* html */ `
-        <div class="contributor-profile shadow">
-          <a href="${contributor.html_url}">
-            <img 
-              alt="GitHub avatar of contributor ${contributor.login}" 
-              class="contributor-avatar" 
-              loading="lazy" 
-              src="${contributor.avatar_url}" 
-            />
-            <div class="contributor-username">${contributor.login}</div>
-          </a>
-        </div>
-      `
-      )
-      .join('');
+function savePresets() {
+  const presets = {};
+  customInputs.forEach(input => {
+    if (input.type === 'checkbox') {
+      presets[input.id] = input.checked;
+    } else {
+      presets[input.id] = input.value;
+    }
   });
+  localStorage.setItem('handwriting-presets', JSON.stringify(presets));
+}
+
+function loadPresets() {
+  const saved = localStorage.getItem('handwriting-presets');
+  if (saved) {
+    const presets = JSON.parse(saved);
+    customInputs.forEach(input => {
+      if (presets[input.id] !== undefined) {
+        if (input.type === 'checkbox') {
+          input.checked = presets[input.id];
+        } else {
+          input.value = presets[input.id];
+        }
+        // Dispatch change event to trigger updates
+        input.dispatchEvent(new Event('change'));
+      }
+    });
+  }
+}
+
+customInputs.forEach(input => {
+  input.addEventListener('change', savePresets);
+});
+
+// Load presets on init after a tiny delay to ensure bindings are complete
+setTimeout(loadPresets, 100);

@@ -1,33 +1,4 @@
 /* DARK MODE SWITCH */
-.dark-mode-toggle {
-  cursor: pointer;
-  position: absolute;
-  top: 100px;
-  right: 150px;
-  border: none;
-  background: transparent;
-}
-body:not(.user-is-tabbing) .dark-mode-toggle:focus {
-  outline: none;
-}
-.dark-mode-toggle .moon {
-  padding: 10px;
-}
-.dark-mode-toggle .sun {
-  padding: 5px;
-}
-body .dark-mode-toggle .moon {
-  display: none;
-}
-body .dark-mode-toggle .sun {
-  display: inline-block;
-}
-body.dark .dark-mode-toggle .moon {
-  display: inline-block;
-}
-body.dark .dark-mode-toggle .sun {
-  display: none;
-}
 
 /* Switch */
 .switch-toggle {
@@ -42,10 +13,10 @@ body.dark .dark-mode-toggle .sun {
 }
 
 .switch-toggle input {
-  position: relative;
-  top: 4px;
-  left: 4px;
-  z-index: -1;
+  position: absolute;
+  opacity: 0;
+  width: 0;
+  height: 0;
 }
 
 .switch-toggle div {

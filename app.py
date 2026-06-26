@@ -74,7 +74,7 @@ def load_custom_font(font_bytes, size):
         return ImageFont.load_default()
 
 # --- UTILS FOR BACKGROUNDS ---
-def create_background(style, width, height, custom_bg=None):
+def create_background(style, width, height, custom_bg=None, line_spacing=40, margin_top=100, font_size=30):
     if custom_bg:
         try:
             img = Image.open(io.BytesIO(custom_bg)).convert("RGBA")
@@ -85,24 +85,27 @@ def create_background(style, width, height, custom_bg=None):
     img = Image.new("RGBA", (width, height), (255, 255, 255, 255))
     draw = ImageDraw.Draw(img)
     
-    if style == "Ruled":
-        for y in range(100, height, 40):
-            draw.line([(0, y), (width, y)], fill="#a6d4fa", width=2)
-    elif style == "College Ruled":
-        for y in range(100, height, 30):
-            draw.line([(0, y), (width, y)], fill="#a6d4fa", width=2)
-        draw.line([(80, 0), (80, height)], fill="#fca5a5", width=2)
+    if style in ["Ruled", "College Ruled"]:
+        for y in range(margin_top, height, line_spacing):
+            line_y = y + int(font_size * 0.85)
+            if line_y < height:
+                draw.line([(0, line_y), (width, line_y)], fill="#a6d4fa", width=2)
+        if style == "College Ruled":
+            draw.line([(80, 0), (80, height)], fill="#fca5a5", width=2)
+            
+    elif style == "Yellow Legal":
+        img = Image.new("RGBA", (width, height), "#fef08a")
+        draw = ImageDraw.Draw(img)
+        for y in range(margin_top, height, line_spacing):
+            line_y = y + int(font_size * 0.85)
+            if line_y < height:
+                draw.line([(0, line_y), (width, line_y)], fill="#cbd5e1", width=2)
+        draw.line([(100, 0), (100, height)], fill="#fca5a5", width=3)
+        draw.line([(105, 0), (105, height)], fill="#fca5a5", width=3)
     elif style == "Dot Grid":
         for y in range(20, height, 20):
             for x in range(20, width, 20):
                 draw.ellipse([x-1, y-1, x+1, y+1], fill="#cbd5e1")
-    elif style == "Yellow Legal":
-        img = Image.new("RGBA", (width, height), "#fef08a")
-        draw = ImageDraw.Draw(img)
-        for y in range(100, height, 40):
-            draw.line([(0, y), (width, y)], fill="#cbd5e1", width=2)
-        draw.line([(100, 0), (100, height)], fill="#fca5a5", width=3)
-        draw.line([(105, 0), (105, height)], fill="#fca5a5", width=3)
     elif style == "Graph":
         for y in range(0, height, 20):
             draw.line([(0, y), (width, y)], fill="#e5e7eb", width=1)
@@ -131,13 +134,13 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
     
     images = []
     lines = text.split('\n')
+    line_spacing = int(font_size * line_spacing_factor)
     
-    current_bg = create_background(paper_style, width, height, custom_bg)
+    current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size)
     text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(text_layer)
     
     x, y = margin_left, margin_top
-    line_spacing = int(font_size * line_spacing_factor)
     
     jitter_amp = 0
     if messiness == "Slight Wobble":
@@ -158,7 +161,7 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
         
         out = Image.alpha_composite(current_bg.convert("RGBA"), text_layer)
         images.append(out.convert("RGB"))
-        current_bg = create_background(paper_style, width, height, custom_bg)
+        current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size)
         text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
         return draw
 
@@ -333,7 +336,7 @@ else:
             width, height = page_dims
             if last_y + 200 > height - margins[1]:
                 # Does not fit, append as new page
-                diagram_page = create_background(paper_style, width, height, custom_bg_bytes)
+                diagram_page = create_background(paper_style, width, height, custom_bg_bytes, int(font_size * line_spacing_factor), margins[0], font_size)
                 diagram_page.paste(diagram, (margins[2], margins[0]), diagram)
                 images.append(diagram_page.convert("RGB"))
             else:

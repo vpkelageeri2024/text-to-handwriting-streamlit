@@ -86,9 +86,10 @@ def create_background(style, width, height, custom_bg=None, line_spacing=40, mar
     draw = ImageDraw.Draw(img)
     
     if style in ["Ruled", "College Ruled"]:
-        for y in range(margin_top, height, line_spacing):
-            line_y = y + int(font_size * 0.85)
-            if line_y < height:
+        offset = int((line_spacing - font_size) / 2)
+        for y in range(margin_top, height + line_spacing, line_spacing):
+            line_y = y - offset
+            if 0 <= line_y < height:
                 draw.line([(0, line_y), (width, line_y)], fill="#a6d4fa", width=2)
         if style == "College Ruled":
             draw.line([(80, 0), (80, height)], fill="#fca5a5", width=2)
@@ -96,9 +97,10 @@ def create_background(style, width, height, custom_bg=None, line_spacing=40, mar
     elif style == "Yellow Legal":
         img = Image.new("RGBA", (width, height), "#fef08a")
         draw = ImageDraw.Draw(img)
-        for y in range(margin_top, height, line_spacing):
-            line_y = y + int(font_size * 0.85)
-            if line_y < height:
+        offset = int((line_spacing - font_size) / 2)
+        for y in range(margin_top, height + line_spacing, line_spacing):
+            line_y = y - offset
+            if 0 <= line_y < height:
                 draw.line([(0, line_y), (width, line_y)], fill="#cbd5e1", width=2)
         draw.line([(100, 0), (100, height)], fill="#fca5a5", width=3)
         draw.line([(105, 0), (105, height)], fill="#fca5a5", width=3)

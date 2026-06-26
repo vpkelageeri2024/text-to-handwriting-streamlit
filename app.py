@@ -88,6 +88,14 @@ def create_background(style, width, height, custom_bg=None):
     if style == "Ruled":
         for y in range(100, height, 40):
             draw.line([(0, y), (width, y)], fill="#a6d4fa", width=2)
+    elif style == "College Ruled":
+        for y in range(100, height, 30):
+            draw.line([(0, y), (width, y)], fill="#a6d4fa", width=2)
+        draw.line([(80, 0), (80, height)], fill="#fca5a5", width=2)
+    elif style == "Dot Grid":
+        for y in range(20, height, 20):
+            for x in range(20, width, 20):
+                draw.ellipse([x-1, y-1, x+1, y+1], fill="#cbd5e1")
     elif style == "Yellow Legal":
         img = Image.new("RGBA", (width, height), "#fef08a")
         draw = ImageDraw.Draw(img)
@@ -246,7 +254,7 @@ with tab_basic:
         ink_color = st.color_picker("Ink Color", value="#000f55")
         
     with col2:
-        paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "Yellow Legal", "Graph", "Parchment"])
+        paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "College Ruled", "Dot Grid", "Yellow Legal", "Graph", "Parchment"])
         custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
         messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
 

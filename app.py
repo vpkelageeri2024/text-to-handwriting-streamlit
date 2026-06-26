@@ -119,7 +119,7 @@ def load_custom_font(font_bytes, size):
         return ImageFont.load_default()
 
 # --- UTILS FOR BACKGROUNDS ---
-def create_background(style, width, height, custom_bg=None, line_spacing=40, margin_top=100, font_size=30):
+def create_background(style, width, height, custom_bg=None, line_spacing=40, margin_top=100, font_size=30, is_paid=False):
     if custom_bg:
         try:
             img = Image.open(io.BytesIO(custom_bg)).convert("RGBA")
@@ -161,6 +161,15 @@ def create_background(style, width, height, custom_bg=None, line_spacing=40, mar
     elif style == "Parchment":
         img = Image.new("RGBA", (width, height), "#fdf6e3")
     
+    if not is_paid:
+        wm_layer = Image.new('RGBA', img.size, (255, 255, 255, 0))
+        wm_draw = ImageDraw.Draw(wm_layer)
+        watermark_font = ImageFont.load_default()
+        for y in range(40, height, 100):
+            for x in range(20, width, 150):
+                wm_draw.text((x, y), "PREVIEW", fill=(150, 150, 150, 120), font=watermark_font)
+        img = Image.alpha_composite(img, wm_layer)
+        
     return img
 
 def extract_text_from_file(uploaded_file):
@@ -175,7 +184,7 @@ def extract_text_from_file(uploaded_file):
         return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
     return ""
 
-def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom_bg, messiness, margins, page_size, line_spacing_factor, apply_texture):
+def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom_bg, messiness, margins, page_size, line_spacing_factor, apply_texture, is_paid=False):
     width, height = page_size
     margin_top, margin_bottom, margin_left, margin_right = margins
     
@@ -189,7 +198,7 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
     lines = text.split('\n')
     line_spacing = int(font_size * line_spacing_factor)
     
-    current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size)
+    current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid)
     text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(text_layer)
     
@@ -214,7 +223,7 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
         
         out = Image.alpha_composite(current_bg.convert("RGBA"), text_layer)
         images.append(out.convert("RGB"))
-        current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size)
+        current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid)
         text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
         return draw
 
@@ -366,8 +375,12 @@ else:
             
         # Prepare background
         custom_bg_bytes = custom_bg_file.getvalue() if custom_bg_file else None
-        
         page_dims = page_size_options[page_size_choice]
+        
+        import hashlib
+        state_str = text_input + str(font_size) + str(paper_style) + str(messiness) + str(margins) + (str(canvas_result.json_data) if not is_canvas_empty else "")
+        current_state_id = hashlib.md5(state_str.encode()).hexdigest()
+        is_paid = st.session_state.get('paid_state_id') == current_state_id
         
         images, last_y = render_handwriting(
             text=text_input, 
@@ -380,7 +393,8 @@ else:
             margins=margins, 
             page_size=page_dims, 
             line_spacing_factor=line_spacing_factor,
-            apply_texture=apply_texture
+            apply_texture=apply_texture,
+            is_paid=is_paid
         )
         
         # Append diagram if drawn
@@ -389,7 +403,7 @@ else:
             width, height = page_dims
             if last_y + 200 > height - margins[1]:
                 # Does not fit, append as new page
-                diagram_page = create_background(paper_style, width, height, custom_bg_bytes, int(font_size * line_spacing_factor), margins[0], font_size)
+                diagram_page = create_background(paper_style, width, height, custom_bg_bytes, int(font_size * line_spacing_factor), margins[0], font_size, is_paid)
                 diagram_page.paste(diagram, (margins[2], margins[0]), diagram)
                 images.append(diagram_page.convert("RGB"))
             else:
@@ -405,41 +419,18 @@ if 'generated_images' in st.session_state and (text_input.strip() or not is_canv
     num_pages = len(images)
     st.success(f"Successfully generated {num_pages} pages!")
     
-    # Payment Logic Calculations
-    price_per_page = 5 if num_pages <= 10 else 2
-    total_price_inr = num_pages * price_per_page
-    
-    import hashlib
-    state_str = text_input + str(font_size) + str(paper_style) + str(messiness) + str(margins) + str(num_pages)
-    current_state_id = hashlib.md5(state_str.encode()).hexdigest()
-    is_paid = st.session_state.get('paid_state_id') == current_state_id
-    
-    def apply_watermark(base_img):
-        watermarked = base_img.copy().convert("RGBA")
-        txt_layer = Image.new('RGBA', watermarked.size, (255, 255, 255, 0))
-        draw = ImageDraw.Draw(txt_layer)
-        width, height = watermarked.size
-        
-        try:
-            watermark_font = load_font(font_choice, 80)
-        except Exception:
-            watermark_font = ImageFont.load_default()
-            
-        for y in range(150, height, 300):
-            for x in range(20, width, 400):
-                draw.text((x, y), "PREVIEW", fill=(255, 0, 0, 100), font=watermark_font)
-        return Image.alpha_composite(watermarked, txt_layer).convert("RGB")
-    
     # Display images
     cols = st.columns(min(num_pages, 3) if num_pages > 0 else 1)
     for i, img in enumerate(images):
         with cols[i % 3]:
-            if is_paid:
-                st.image(img, caption=f"Page {i+1} (Unlocked)", use_container_width=True)
-            else:
-                st.image(apply_watermark(img), caption=f"Page {i+1} (Watermarked Preview)", use_container_width=True)
+            caption_text = f"Page {i+1} (Unlocked)" if is_paid else f"Page {i+1} (Watermarked Preview)"
+            st.image(img, caption=caption_text, use_container_width=True)
             
     st.markdown("---")
+    
+    # Payment Logic Calculations
+    price_per_page = 5 if num_pages <= 10 else 2
+    total_price_inr = num_pages * price_per_page
     
     if is_paid:
         st.success("✅ Payment verified for these pages! You can now download them.")

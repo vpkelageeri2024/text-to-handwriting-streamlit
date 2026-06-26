@@ -7,6 +7,9 @@ import math
 import random
 import zipfile
 import numpy as np
+import docx
+import pypdf
+from streamlit_drawable_canvas import st_canvas
 
 st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="📝")
 
@@ -63,8 +66,22 @@ def load_font(font_name, size):
         st.error(f"Failed to load font '{font_name}': {e}")
         return ImageFont.load_default()
 
+def load_custom_font(font_bytes, size):
+    try:
+        return ImageFont.truetype(io.BytesIO(font_bytes), size)
+    except Exception as e:
+        st.error(f"Failed to load custom font: {e}")
+        return ImageFont.load_default()
+
 # --- UTILS FOR BACKGROUNDS ---
-def create_background(style, width, height):
+def create_background(style, width, height, custom_bg=None):
+    if custom_bg:
+        try:
+            img = Image.open(io.BytesIO(custom_bg)).convert("RGBA")
+            return img.resize((width, height))
+        except Exception:
+            pass # Fallback to standard style if custom bg fails
+
     img = Image.new("RGBA", (width, height), (255, 255, 255, 255))
     draw = ImageDraw.Draw(img)
     
@@ -76,7 +93,6 @@ def create_background(style, width, height):
         draw = ImageDraw.Draw(img)
         for y in range(100, height, 40):
             draw.line([(0, y), (width, y)], fill="#cbd5e1", width=2)
-        # Margins
         draw.line([(100, 0), (100, height)], fill="#fca5a5", width=3)
         draw.line([(105, 0), (105, height)], fill="#fca5a5", width=3)
     elif style == "Graph":
@@ -89,24 +105,32 @@ def create_background(style, width, height):
     
     return img
 
-def render_handwriting(text, font_name, font_size, ink_color, paper_style, messiness):
-    width, height = 800, 1131 # A4 ratio scaled
-    margin_x, margin_y = 50, 100
-    if paper_style == "Yellow Legal":
-        margin_x = 120
-        
-    font = load_font(font_name, font_size)
-    images = []
+def extract_text_from_file(uploaded_file):
+    name = uploaded_file.name.lower()
+    if name.endswith('.txt'):
+        return uploaded_file.getvalue().decode('utf-8', errors='ignore')
+    elif name.endswith('.docx'):
+        doc = docx.Document(uploaded_file)
+        return '\n'.join([para.text for para in doc.paragraphs])
+    elif name.endswith('.pdf'):
+        reader = pypdf.PdfReader(uploaded_file)
+        return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+    return ""
+
+def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom_bg, messiness, margins, page_size, line_spacing_factor, apply_texture):
+    width, height = page_size
+    margin_top, margin_bottom, margin_left, margin_right = margins
     
+    images = []
     lines = text.split('\n')
     
-    current_img = create_background(paper_style, width, height)
-    draw = ImageDraw.Draw(current_img)
+    current_bg = create_background(paper_style, width, height, custom_bg)
+    text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+    draw = ImageDraw.Draw(text_layer)
     
-    x, y = margin_x, margin_y
-    line_spacing = int(font_size * 1.5)
+    x, y = margin_left, margin_top
+    line_spacing = int(font_size * line_spacing_factor)
     
-    # Messiness factor
     jitter_amp = 0
     if messiness == "Slight Wobble":
         jitter_amp = 2
@@ -114,106 +138,142 @@ def render_handwriting(text, font_name, font_size, ink_color, paper_style, messi
         jitter_amp = 5
 
     def add_page():
-        images.append(current_img.convert("RGB"))
-        return create_background(paper_style, width, height)
+        nonlocal text_layer, current_bg
+        if apply_texture:
+            arr = np.array(text_layer)
+            alpha = arr[:,:,3]
+            mask = alpha > 0
+            if mask.any():
+                noise = np.random.randint(150, 255, size=alpha.shape)
+                arr[:,:,3] = np.where(mask, (alpha.astype(np.float32) * (noise / 255.0)).astype(np.uint8), alpha)
+                text_layer = Image.fromarray(arr, mode="RGBA")
+        
+        out = Image.alpha_composite(current_bg.convert("RGBA"), text_layer)
+        images.append(out.convert("RGB"))
+        current_bg = create_background(paper_style, width, height, custom_bg)
+        text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
+        return draw
 
     for line in lines:
         words = line.split(' ')
         for word in words:
-            # Check bounding box
-            # get length of word with a trailing space
-            word_w = draw.textlength(word + " ", font=font)
+            word_w = draw.textlength(word + " ", font=font_obj)
             
-            # Robust text wrapping for extremely long words
-            if word_w > (width - margin_x - 50):
+            if word_w > (width - margin_left - margin_right):
                 chars = list(word + " ")
                 for char in chars:
-                    char_w = draw.textlength(char, font=font)
-                    if x + char_w > width - 50:
-                        x = margin_x
+                    char_w = draw.textlength(char, font=font_obj)
+                    if x + char_w > width - margin_right:
+                        x = margin_left
                         y += line_spacing
-                        if y > height - 100:
-                            current_img = add_page()
-                            draw = ImageDraw.Draw(current_img)
-                            y = margin_y
+                        if y > height - margin_bottom:
+                            add_page()
+                            draw = ImageDraw.Draw(text_layer)
+                            y = margin_top
                     dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
                     dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
-                    draw.text((x + dx, y + dy), char, fill=ink_color, font=font)
+                    draw.text((x + dx, y + dy), char, fill=ink_color, font=font_obj)
                     x += char_w
                 continue
 
-            if x + word_w > width - 50:
-                x = margin_x
+            if x + word_w > width - margin_right:
+                x = margin_left
                 y += line_spacing
-                if y > height - 100:
-                    current_img = add_page()
-                    draw = ImageDraw.Draw(current_img)
-                    y = margin_y
+                if y > height - margin_bottom:
+                    add_page()
+                    draw = ImageDraw.Draw(text_layer)
+                    y = margin_top
             
             dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
             dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
             
-            draw.text((x + dx, y + dy), word, fill=ink_color, font=font)
+            draw.text((x + dx, y + dy), word, fill=ink_color, font=font_obj)
             x += word_w
         
-        # Newline
-        x = margin_x
+        x = margin_left
         y += line_spacing
-        if y > height - 100:
-            current_img = add_page()
-            draw = ImageDraw.Draw(current_img)
-            y = margin_y
+        if y > height - margin_bottom:
+            add_page()
+            draw = ImageDraw.Draw(text_layer)
+            y = margin_top
+
+    # Handle the final page
+    if apply_texture:
+        arr = np.array(text_layer)
+        alpha = arr[:,:,3]
+        mask = alpha > 0
+        if mask.any():
+            noise = np.random.randint(150, 255, size=alpha.shape)
+            arr[:,:,3] = np.where(mask, (alpha.astype(np.float32) * (noise / 255.0)).astype(np.uint8), alpha)
+            text_layer = Image.fromarray(arr, mode="RGBA")
             
-    images.append(current_img.convert("RGB"))
+    out = Image.alpha_composite(current_bg.convert("RGBA"), text_layer)
+    images.append(out.convert("RGB"))
     return images, y
 
 # --- UI ---
-st.markdown("""
-<style>
-    .stApp {
-        background: linear-gradient(135deg, #ff9a9e 0%, #fecfef 99%, #fecfef 100%);
-        color: #1f2937;
-    }
-    .main-title {
-        text-align: center;
-        font-family: 'Helvetica Neue', sans-serif;
-        font-size: 3.5rem;
-        font-weight: 800;
-        color: #fff;
-        text-shadow: 2px 2px 0px #ff6b6b, 4px 4px 0px #4ecdc4, 6px 6px 0px #45b7d1;
-        margin-bottom: 2rem;
-    }
-</style>
-""", unsafe_allow_html=True)
+st.markdown("<h1 style='text-align: center;'>Text to Handwriting ✨</h1>", unsafe_allow_html=True)
 
-st.markdown("<div class='main-title'>Text to Handwriting</div>", unsafe_allow_html=True)
+st.header("1. Input Document or Text")
+col_upload, col_text = st.columns([1, 1])
 
-# 1. INPUT AT FIRST
-st.header("1. Input Text")
-text_input = st.text_area("Type or paste your text here...", height=200, value="Write something nice here...")
+text_input = ""
+with col_upload:
+    uploaded_file = st.file_uploader("Upload a document (.txt, .docx, .pdf)", type=["txt", "docx", "pdf"])
+    if uploaded_file is not None:
+        text_input = extract_text_from_file(uploaded_file)
+        
+with col_text:
+    manual_input = st.text_area("Or type/paste your text here...", height=150, value="Write something nice here..." if not text_input else "")
+    if manual_input:
+        if text_input:
+            text_input += "\n" + manual_input
+        else:
+            text_input = manual_input
 
-# Page Estimator
 estimated_pages = math.ceil(len(text_input) / 1500) if text_input else 0
-st.info(f"📄 Estimated Pages: ~{estimated_pages}")
+st.info(f"📄 Estimated Output Pages: ~{estimated_pages}")
 
-# 2. CUSTOMIZATIONS BELOW
-st.header("2. Customizations")
-col1, col2, col3 = st.columns(3)
+st.header("2. Settings & Customizations")
+tab_basic, tab_layout, tab_advanced = st.tabs(["🖌️ Basic", "📏 Layout", "⚙️ Advanced"])
 
-with col1:
-    font_choice = st.selectbox("Handwriting Font", list(FONT_URLS.keys()))
-    ink_color = st.color_picker("Ink Color", value="#000f55")
+with tab_basic:
+    col1, col2 = st.columns(2)
+    with col1:
+        font_choice = st.selectbox("Handwriting Font", list(FONT_URLS.keys()))
+        custom_font_file = st.file_uploader("Or upload custom font (.ttf, .otf)", type=["ttf", "otf"])
+        font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
+        ink_color = st.color_picker("Ink Color", value="#000f55")
+        
+    with col2:
+        paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "Yellow Legal", "Graph", "Parchment"])
+        custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
+        messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
 
-with col2:
-    paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "Yellow Legal", "Graph", "Parchment"])
-    messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
+with tab_layout:
+    col1, col2 = st.columns(2)
+    with col1:
+        page_size_options = {
+            "A4 (800x1131)": (800, 1131),
+            "US Letter (850x1100)": (850, 1100),
+            "A5 (565x800)": (565, 800)
+        }
+        page_size_choice = st.selectbox("Page Size", list(page_size_options.keys()))
+        line_spacing_factor = st.slider("Line Spacing", 1.0, 3.0, 1.5, 0.1)
+    with col2:
+        st.write("Margins")
+        m_top = st.number_input("Top", 0, 500, 100)
+        m_bottom = st.number_input("Bottom", 0, 500, 100)
+        m_left = st.number_input("Left", 0, 500, 50)
+        m_right = st.number_input("Right", 0, 500, 50)
+        margins = (m_top, m_bottom, m_left, m_right)
 
-with col3:
-    font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
+with tab_advanced:
+    apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True)
+    st.write("Texture applies a slightly transparent, noisy layer to the ink for a realistic pen feel.")
 
 st.header("3. Draw Diagram / Signature (Optional)")
 st.write("Draw something below, and it will be appended to the end of your notes!")
-from streamlit_drawable_canvas import st_canvas
 canvas_result = st_canvas(
     fill_color="rgba(255, 165, 0, 0.3)",
     stroke_width=2,
@@ -225,38 +285,60 @@ canvas_result = st_canvas(
     key="canvas",
 )
 
-if st.button("Generate Image", use_container_width=True):
+if st.button("Generate Image", use_container_width=True, type="primary"):
     is_canvas_empty = canvas_result.image_data is None or not np.any(canvas_result.image_data)
     if not text_input.strip() and is_canvas_empty:
-        st.warning("Please enter some text or draw something.")
+        st.warning("Please enter some text, upload a file, or draw something.")
     else:
         with st.spinner("Generating handwriting..."):
-            images, last_y = render_handwriting(text_input, font_choice, font_size, ink_color, paper_style, messiness)
+            # Prepare font
+            if custom_font_file:
+                font_obj = load_custom_font(custom_font_file.getvalue(), font_size)
+            else:
+                font_obj = load_font(font_choice, font_size)
+                
+            # Prepare background
+            custom_bg_bytes = custom_bg_file.getvalue() if custom_bg_file else None
+            
+            page_dims = page_size_options[page_size_choice]
+            
+            images, last_y = render_handwriting(
+                text=text_input, 
+                font_obj=font_obj, 
+                font_size=font_size, 
+                ink_color=ink_color, 
+                paper_style=paper_style, 
+                custom_bg=custom_bg_bytes,
+                messiness=messiness, 
+                margins=margins, 
+                page_size=page_dims, 
+                line_spacing_factor=line_spacing_factor,
+                apply_texture=apply_texture
+            )
             
             # Append diagram if drawn
             if not is_canvas_empty:
                 diagram = Image.fromarray(canvas_result.image_data).convert("RGBA")
-                
-                # Canvas height is 200, check if it fits on the last page
-                if last_y + 200 > 1131 - 50:
+                width, height = page_dims
+                if last_y + 200 > height - margins[1]:
                     # Does not fit, append as new page
-                    diagram_page = create_background(paper_style, 800, 1131)
-                    diagram_page.paste(diagram, (50, 100), diagram)
+                    diagram_page = create_background(paper_style, width, height, custom_bg_bytes)
+                    diagram_page.paste(diagram, (margins[2], margins[0]), diagram)
                     images.append(diagram_page.convert("RGB"))
                 else:
                     # Fits on the current page, append below text
                     last_page = images[-1].convert("RGBA")
-                    last_page.paste(diagram, (50, int(last_y) + 20), diagram)
+                    last_page.paste(diagram, (margins[2], int(last_y) + 20), diagram)
                     images[-1] = last_page.convert("RGB")
             
             st.session_state['generated_images'] = images
 
 if 'generated_images' in st.session_state:
     images = st.session_state['generated_images']
-    st.markdown(f"**Generated Pages: {len(images)}**")
+    st.success(f"Successfully generated {len(images)} pages!")
     
     # Display images
-    cols = st.columns(min(len(images), 3))
+    cols = st.columns(min(len(images), 3) if len(images) > 0 else 1)
     for i, img in enumerate(images):
         with cols[i % 3]:
             st.image(img, caption=f"Page {i+1}", use_container_width=True)
@@ -283,13 +365,14 @@ if 'generated_images' in st.session_state:
         )
         
     # PDF
-    pdf_buffer = io.BytesIO()
-    images[0].save(pdf_buffer, format="PDF", save_all=True, append_images=images[1:])
-    with dl_col2:
-        st.download_button(
-            label="Download as PDF",
-            data=pdf_buffer.getvalue(),
-            file_name="handwritten_notes.pdf",
-            mime="application/pdf",
-            use_container_width=True
-        )
+    if images:
+        pdf_buffer = io.BytesIO()
+        images[0].save(pdf_buffer, format="PDF", save_all=True, append_images=images[1:])
+        with dl_col2:
+            st.download_button(
+                label="Download as PDF",
+                data=pdf_buffer.getvalue(),
+                file_name="handwritten_notes.pdf",
+                mime="application/pdf",
+                use_container_width=True
+            )

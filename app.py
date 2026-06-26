@@ -184,7 +184,7 @@ def extract_text_from_file(uploaded_file):
         return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
     return ""
 
-def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom_bg, messiness, margins, page_size, line_spacing_factor, apply_texture, is_paid=False):
+def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom_bg, messiness, margins, page_size, line_spacing_factor, apply_texture, is_paid=False, mistake_prob=0.0):
     width, height = page_size
     margin_top, margin_bottom, margin_left, margin_right = margins
     
@@ -227,42 +227,73 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
         text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
         return draw
 
+    import re
+    h = ink_color.lstrip('#')
+    rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
+    
     for line in lines:
-        words = line.split(' ')
-        for word in words:
-            word_w = draw.textlength(word + " ", font=font_obj)
-            
-            if word_w > (width - margin_left - margin_right):
-                chars = list(word + " ")
-                for char in chars:
-                    char_w = draw.textlength(char, font=font_obj)
-                    if x + char_w > width - margin_right:
-                        x = margin_left
-                        y += line_spacing
-                        if y + font_size > height - margin_bottom:
-                            add_page()
-                            draw = ImageDraw.Draw(text_layer)
-                            y = margin_top
-                    dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
-                    dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
-                    draw.text((x + dx, y + dy), char, fill=ink_color, font=font_obj)
-                    x += char_w
+        tokens = re.split(r'( +)', line)
+        for token in tokens:
+            if not token:
                 continue
-
-            if x + word_w > width - margin_right:
-                x = margin_left
-                y += line_spacing
-                if y + font_size > height - margin_bottom:
-                    add_page()
-                    draw = ImageDraw.Draw(text_layer)
-                    y = margin_top
+                
+            current_color = rgb
+            clean_word = token
             
-            dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
-            dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
+            if token.strip() and token.startswith('*') and token.endswith('*') and len(token) > 2:
+                current_color = (200, 0, 0) # Teacher Red
+                clean_word = token[1:-1]
+                
+            is_mistake = (random.random() < mistake_prob) if clean_word.strip() else False
             
-            draw.text((x + dx, y + dy), word, fill=ink_color, font=font_obj)
-            x += word_w
-        
+            def render_text(w_text, color, cross_out=False):
+                nonlocal x, y, draw
+                w_w = draw.textlength(w_text, font=font_obj)
+                is_space = (w_text.strip() == "")
+                
+                if x + w_w > width - margin_right:
+                    if is_space:
+                        return
+                    x = margin_left
+                    y += line_spacing
+                    if y + font_size > height - margin_bottom:
+                        add_page()
+                        draw = ImageDraw.Draw(text_layer)
+                        y = margin_top
+                        
+                if is_space:
+                    x += w_w
+                    return
+                    
+                start_x, start_y = x, y
+                dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
+                dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
+                
+                # Dynamic Pen Pressure
+                alpha = random.randint(180, 255)
+                fill_color = color + (alpha,)
+                
+                draw.text((x + dx, y + dy), w_text, fill=fill_color, font=font_obj)
+                x += w_w
+                
+                if cross_out:
+                    cross_y = start_y + font_size * 0.6 + dy
+                    draw.line([(start_x, cross_y), (x, cross_y)], fill=color + (200,), width=3)
+            
+            if is_mistake:
+                chars = list(clean_word)
+                if len(chars) > 1:
+                    idx = random.randint(0, len(chars)-2)
+                    chars[idx], chars[idx+1] = chars[idx+1], chars[idx]
+                    wrong_word = "".join(chars)
+                else:
+                    wrong_word = "wrong"
+                    
+                render_text(wrong_word, color=current_color, cross_out=True)
+                x += draw.textlength(" ", font=font_obj)
+                
+            render_text(clean_word, color=current_color)
+            
         x = margin_left
         y += line_spacing
         if y + font_size > height - margin_bottom:
@@ -344,6 +375,7 @@ with tab_layout:
 with tab_advanced:
     apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True)
     st.write("Texture applies a slightly transparent, noisy layer to the ink for a realistic pen feel.")
+    mistake_prob = st.slider("Realistic Mistakes Probability", 0.0, 0.1, 0.0, 0.01, help="Simulates human errors by randomly miswriting and crossing out words.")
 
 st.header("3. Draw Diagram / Signature (Optional)")
 st.write("Draw something below, and it will be appended to the end of your notes!")
@@ -378,7 +410,7 @@ else:
         page_dims = page_size_options[page_size_choice]
         
         import hashlib
-        state_str = text_input + str(font_size) + str(paper_style) + str(messiness) + str(margins) + (str(canvas_result.json_data) if not is_canvas_empty else "")
+        state_str = text_input + str(font_size) + str(paper_style) + str(messiness) + str(margins) + (str(canvas_result.json_data) if not is_canvas_empty else "") + str(mistake_prob)
         current_state_id = hashlib.md5(state_str.encode()).hexdigest()
         is_paid = st.session_state.get('paid_state_id') == current_state_id
         
@@ -394,7 +426,8 @@ else:
             page_size=page_dims, 
             line_spacing_factor=line_spacing_factor,
             apply_texture=apply_texture,
-            is_paid=is_paid
+            is_paid=is_paid,
+            mistake_prob=mistake_prob
         )
         
         # Append diagram if drawn

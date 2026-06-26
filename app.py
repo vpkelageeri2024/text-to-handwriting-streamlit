@@ -6,6 +6,7 @@ import io
 import math
 import random
 import zipfile
+import numpy as np
 
 st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="📝")
 
@@ -49,10 +50,18 @@ def load_font(font_name, size):
     if not os.path.exists(path):
         url = FONT_URLS.get(font_name)
         if url:
-            urllib.request.urlretrieve(url, path)
+            try:
+                urllib.request.urlretrieve(url, path)
+            except Exception as e:
+                st.error(f"Failed to download font '{font_name}': {e}")
+                return ImageFont.load_default()
         else:
             return ImageFont.load_default()
-    return ImageFont.truetype(path, size)
+    try:
+        return ImageFont.truetype(path, size)
+    except Exception as e:
+        st.error(f"Failed to load font '{font_name}': {e}")
+        return ImageFont.load_default()
 
 # --- UTILS FOR BACKGROUNDS ---
 def create_background(style, width, height):
@@ -115,6 +124,24 @@ def render_handwriting(text, font_name, font_size, ink_color, paper_style, messi
             # get length of word with a trailing space
             word_w = draw.textlength(word + " ", font=font)
             
+            # Robust text wrapping for extremely long words
+            if word_w > (width - margin_x - 50):
+                chars = list(word + " ")
+                for char in chars:
+                    char_w = draw.textlength(char, font=font)
+                    if x + char_w > width - 50:
+                        x = margin_x
+                        y += line_spacing
+                        if y > height - 100:
+                            current_img = add_page()
+                            draw = ImageDraw.Draw(current_img)
+                            y = margin_y
+                    dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
+                    dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
+                    draw.text((x + dx, y + dy), char, fill=ink_color, font=font)
+                    x += char_w
+                continue
+
             if x + word_w > width - 50:
                 x = margin_x
                 y += line_spacing
@@ -123,9 +150,10 @@ def render_handwriting(text, font_name, font_size, ink_color, paper_style, messi
                     draw = ImageDraw.Draw(current_img)
                     y = margin_y
             
-            dy = random.uniform(-jitter_amp, jitter_amp)
+            dy = random.uniform(-jitter_amp, jitter_amp) if jitter_amp > 0 else 0
+            dx = random.uniform(-jitter_amp/2, jitter_amp/2) if jitter_amp > 0 else 0
             
-            draw.text((x, y + dy), word, fill=ink_color, font=font)
+            draw.text((x + dx, y + dy), word, fill=ink_color, font=font)
             x += word_w
         
         # Newline
@@ -137,7 +165,7 @@ def render_handwriting(text, font_name, font_size, ink_color, paper_style, messi
             y = margin_y
             
     images.append(current_img.convert("RGB"))
-    return images
+    return images, y
 
 # --- UI ---
 st.markdown("""
@@ -198,27 +226,28 @@ canvas_result = st_canvas(
 )
 
 if st.button("Generate Image", use_container_width=True):
-    if not text_input.strip() and not canvas_result.image_data.any():
+    is_canvas_empty = canvas_result.image_data is None or not np.any(canvas_result.image_data)
+    if not text_input.strip() and is_canvas_empty:
         st.warning("Please enter some text or draw something.")
     else:
         with st.spinner("Generating handwriting..."):
-            images = render_handwriting(text_input, font_choice, font_size, ink_color, paper_style, messiness)
+            images, last_y = render_handwriting(text_input, font_choice, font_size, ink_color, paper_style, messiness)
             
             # Append diagram if drawn
-            if canvas_result.image_data is not None:
-                # Check if anything was actually drawn by seeing if there are any non-zero pixels
-                import numpy as np
-                if np.any(canvas_result.image_data):
-                    diagram = Image.fromarray(canvas_result.image_data)
-                    # Convert to RGBA
-                    diagram = diagram.convert("RGBA")
-                    # Paste onto the last page or a new page
-                    last_page = images[-1].convert("RGBA")
-                    # We just paste it at the bottom. If it doesn't fit, we should add a new page.
-                    # For simplicity, let's just add it as a new page.
+            if not is_canvas_empty:
+                diagram = Image.fromarray(canvas_result.image_data).convert("RGBA")
+                
+                # Canvas height is 200, check if it fits on the last page
+                if last_y + 200 > 1131 - 50:
+                    # Does not fit, append as new page
                     diagram_page = create_background(paper_style, 800, 1131)
                     diagram_page.paste(diagram, (50, 100), diagram)
                     images.append(diagram_page.convert("RGB"))
+                else:
+                    # Fits on the current page, append below text
+                    last_page = images[-1].convert("RGBA")
+                    last_page.paste(diagram, (50, int(last_y) + 20), diagram)
+                    images[-1] = last_page.convert("RGB")
             
             st.session_state['generated_images'] = images
 

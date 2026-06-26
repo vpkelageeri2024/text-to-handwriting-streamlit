@@ -18,49 +18,34 @@ st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="�
 try:
     RAZORPAY_KEY_ID = st.secrets.get("RAZORPAY_KEY_ID", "rzp_test_YOUR_KEY_ID_HERE")
     RAZORPAY_KEY_SECRET = st.secrets.get("RAZORPAY_KEY_SECRET", "YOUR_KEY_SECRET_HERE")
-    APP_URL = st.secrets.get("APP_URL", "http://localhost:8501")
 except Exception:
     RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID_HERE"
     RAZORPAY_KEY_SECRET = "YOUR_KEY_SECRET_HERE"
-    APP_URL = "http://localhost:8501"
 
-def create_payment_link():
+def create_payment_link(amount_paise, description):
     try:
         rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
         payment_data = {
-            "amount": 9900,
+            "amount": amount_paise,
             "currency": "INR",
-            "description": "Unlock Text-to-Handwriting Premium",
+            "description": description,
             "customer": {"name": "User", "email": "user@example.com"},
             "notify": {"email": False, "sms": False},
-            "reminder_enable": True,
-            "callback_url": f"{APP_URL.rstrip('/')}/?payment=success",
-            "callback_method": "get"
+            "reminder_enable": False
         }
         payment_link = rzp_client.payment_link.create(payment_data)
-        return payment_link['short_url']
+        return payment_link['id'], payment_link['short_url']
     except Exception as e:
-        st.error("Razorpay Error: Please replace placeholder API keys in app.py with your real Test keys.")
-        return None
+        st.error("Razorpay Error: Please verify your API keys.")
+        return None, None
 
-if st.query_params.get("payment") == "success":
-    st.session_state['is_premium'] = True
-    st.query_params.clear()
-
-is_premium = st.session_state.get('is_premium', False)
-
-with st.sidebar:
-    st.header("💎 Account Status")
-    if is_premium:
-        st.success("Premium Active! All features unlocked.")
-    else:
-        st.info("Free Version Active")
-        st.write("Unlock Custom Fonts, Custom Backgrounds, and Ink Textures for a one-time fee.")
-        if st.button("Unlock Premium for ₹99"):
-            with st.spinner("Preparing checkout..."):
-                url = create_payment_link()
-                if url:
-                    st.link_button("👉 Click to Pay (Razorpay)", url)
+def check_payment_status(link_id):
+    try:
+        rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        link = rzp_client.payment_link.fetch(link_id)
+        return link.get('status') == 'paid'
+    except Exception:
+        return False
 
 # --- UTILS FOR FONTS ---
 FONT_URLS = {
@@ -309,23 +294,13 @@ with tab_basic:
     col1, col2 = st.columns(2)
     with col1:
         font_choice = st.selectbox("Handwriting Font", list(FONT_URLS.keys()))
-        if is_premium:
-            custom_font_file = st.file_uploader("Or upload custom font (.ttf, .otf)", type=["ttf", "otf"])
-        else:
-            st.info("🔒 Custom Fonts require Premium")
-            custom_font_file = None
-            
+        custom_font_file = st.file_uploader("Or upload custom font (.ttf, .otf)", type=["ttf", "otf"])
         font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
         ink_color = st.color_picker("Ink Color", value="#000f55")
         
     with col2:
         paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "College Ruled", "Dot Grid", "Yellow Legal", "Graph", "Parchment"])
-        if is_premium:
-            custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
-        else:
-            st.info("🔒 Custom Backgrounds require Premium")
-            custom_bg_file = None
-            
+        custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
         messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
 
 with tab_layout:
@@ -347,12 +322,8 @@ with tab_layout:
         margins = (m_top, m_bottom, m_left, m_right)
 
 with tab_advanced:
-    if is_premium:
-        apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True)
-        st.write("Texture applies a slightly transparent, noisy layer to the ink for a realistic pen feel.")
-    else:
-        apply_texture = False
-        st.info("🔒 Ink Texture (Realistic Ballpoint Pen effect) requires Premium")
+    apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True)
+    st.write("Texture applies a slightly transparent, noisy layer to the ink for a realistic pen feel.")
 
 st.header("3. Draw Diagram / Signature (Optional)")
 st.write("Draw something below, and it will be appended to the end of your notes!")
@@ -420,44 +391,67 @@ else:
 
 if 'generated_images' in st.session_state and (text_input.strip() or not is_canvas_empty):
     images = st.session_state['generated_images']
-    st.success(f"Successfully generated {len(images)} pages!")
+    num_pages = len(images)
+    st.success(f"Successfully generated {num_pages} pages!")
     
-    # Display images
-    cols = st.columns(min(len(images), 3) if len(images) > 0 else 1)
+    # Display images (Preview)
+    cols = st.columns(min(num_pages, 3) if num_pages > 0 else 1)
     for i, img in enumerate(images):
         with cols[i % 3]:
-            st.image(img, caption=f"Page {i+1}", use_container_width=True)
+            st.image(img, caption=f"Page {i+1} Preview", use_container_width=True)
             
-    # Download actions
     st.markdown("---")
-    dl_col1, dl_col2 = st.columns(2)
     
-    # ZIP
-    zip_buffer = io.BytesIO()
-    with zipfile.ZipFile(zip_buffer, "w") as zf:
-        for i, img in enumerate(images):
-            img_byte_arr = io.BytesIO()
-            img.save(img_byte_arr, format='PNG')
-            zf.writestr(f"page_{i+1}.png", img_byte_arr.getvalue())
-            
-    with dl_col1:
-        st.download_button(
-            label="Download All as ZIP",
-            data=zip_buffer.getvalue(),
-            file_name="handwritten_notes.zip",
-            mime="application/zip",
-            use_container_width=True
-        )
+    # Payment Logic
+    price_per_page = 5 if num_pages <= 10 else 2
+    total_price_inr = num_pages * price_per_page
+    
+    # Create a unique ID for this exact generation state
+    import hashlib
+    state_str = text_input + str(font_size) + str(paper_style) + str(messiness) + str(margins) + str(num_pages)
+    current_state_id = hashlib.md5(state_str.encode()).hexdigest()
+    
+    if st.session_state.get('paid_state_id') == current_state_id:
+        st.success("✅ Payment verified for these pages! You can now download them.")
+        dl_col1, dl_col2 = st.columns(2)
         
-    # PDF
-    if images:
-        pdf_buffer = io.BytesIO()
-        images[0].save(pdf_buffer, format="PDF", save_all=True, append_images=images[1:])
-        with dl_col2:
-            st.download_button(
-                label="Download as PDF",
-                data=pdf_buffer.getvalue(),
-                file_name="handwritten_notes.pdf",
-                mime="application/pdf",
-                use_container_width=True
-            )
+        # ZIP
+        zip_buffer = io.BytesIO()
+        with zipfile.ZipFile(zip_buffer, "w") as zf:
+            for i, img in enumerate(images):
+                img_byte_arr = io.BytesIO()
+                img.save(img_byte_arr, format='PNG')
+                zf.writestr(f"page_{i+1}.png", img_byte_arr.getvalue())
+                
+        with dl_col1:
+            st.download_button("Download All as ZIP", data=zip_buffer.getvalue(), file_name="handwritten_notes.zip", mime="application/zip", use_container_width=True)
+            
+        # PDF
+        if images:
+            pdf_buffer = io.BytesIO()
+            images[0].save(pdf_buffer, format="PDF", save_all=True, append_images=images[1:])
+            with dl_col2:
+                st.download_button("Download as PDF", data=pdf_buffer.getvalue(), file_name="handwritten_notes.pdf", mime="application/pdf", use_container_width=True)
+    else:
+        st.write(f"### 📥 Download your High-Res Document for ₹{total_price_inr}")
+        st.write(f"*{num_pages} pages at ₹{price_per_page} per page.*")
+        
+        pay_col1, pay_col2 = st.columns([1, 1])
+        with pay_col1:
+            if st.button("💳 Generate Secure Payment Link", use_container_width=True):
+                with st.spinner("Connecting to Razorpay..."):
+                    link_id, link_url = create_payment_link(total_price_inr * 100, f"{num_pages} pages of handwriting export")
+                    st.session_state['current_payment_link_id'] = link_id
+                    st.session_state['current_payment_link_url'] = link_url
+                    
+        if st.session_state.get('current_payment_link_url'):
+            with pay_col2:
+                st.link_button("👉 Step 1: Click here to Pay (Opens in new tab)", st.session_state['current_payment_link_url'], use_container_width=True)
+                
+                if st.button("👉 Step 2: I have completed the payment", type="primary", use_container_width=True):
+                    with st.spinner("Verifying payment status..."):
+                        if check_payment_status(st.session_state['current_payment_link_id']):
+                            st.session_state['paid_state_id'] = current_state_id
+                            st.rerun()
+                        else:
+                            st.error("Payment has not been completed yet. Please complete the payment and try again.")

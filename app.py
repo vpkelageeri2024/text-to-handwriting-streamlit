@@ -9,9 +9,52 @@ import zipfile
 import numpy as np
 import docx
 import pypdf
+import razorpay
 from streamlit_drawable_canvas import st_canvas
 
 st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="📝")
+
+# --- RAZORPAY SETUP ---
+RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID_HERE"
+RAZORPAY_KEY_SECRET = "YOUR_KEY_SECRET_HERE"
+
+def create_payment_link():
+    try:
+        rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
+        payment_data = {
+            "amount": 9900,
+            "currency": "INR",
+            "description": "Unlock Text-to-Handwriting Premium",
+            "customer": {"name": "User", "email": "user@example.com"},
+            "notify": {"email": False, "sms": False},
+            "reminder_enable": True,
+            "callback_url": "http://localhost:8501/?payment=success",
+            "callback_method": "get"
+        }
+        payment_link = rzp_client.payment_link.create(payment_data)
+        return payment_link['short_url']
+    except Exception as e:
+        st.error("Razorpay Error: Please replace placeholder API keys in app.py with your real Test keys.")
+        return None
+
+if st.query_params.get("payment") == "success":
+    st.session_state['is_premium'] = True
+    st.query_params.clear()
+
+is_premium = st.session_state.get('is_premium', False)
+
+with st.sidebar:
+    st.header("💎 Account Status")
+    if is_premium:
+        st.success("Premium Active! All features unlocked.")
+    else:
+        st.info("Free Version Active")
+        st.write("Unlock Custom Fonts, Custom Backgrounds, and Ink Textures for a one-time fee.")
+        if st.button("Unlock Premium for ₹99"):
+            with st.spinner("Preparing checkout..."):
+                url = create_payment_link()
+                if url:
+                    st.link_button("👉 Click to Pay (Razorpay)", url)
 
 # --- UTILS FOR FONTS ---
 FONT_URLS = {
@@ -260,13 +303,23 @@ with tab_basic:
     col1, col2 = st.columns(2)
     with col1:
         font_choice = st.selectbox("Handwriting Font", list(FONT_URLS.keys()))
-        custom_font_file = st.file_uploader("Or upload custom font (.ttf, .otf)", type=["ttf", "otf"])
+        if is_premium:
+            custom_font_file = st.file_uploader("Or upload custom font (.ttf, .otf)", type=["ttf", "otf"])
+        else:
+            st.info("🔒 Custom Fonts require Premium")
+            custom_font_file = None
+            
         font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
         ink_color = st.color_picker("Ink Color", value="#000f55")
         
     with col2:
         paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "College Ruled", "Dot Grid", "Yellow Legal", "Graph", "Parchment"])
-        custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
+        if is_premium:
+            custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
+        else:
+            st.info("🔒 Custom Backgrounds require Premium")
+            custom_bg_file = None
+            
         messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
 
 with tab_layout:
@@ -288,8 +341,12 @@ with tab_layout:
         margins = (m_top, m_bottom, m_left, m_right)
 
 with tab_advanced:
-    apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True)
-    st.write("Texture applies a slightly transparent, noisy layer to the ink for a realistic pen feel.")
+    if is_premium:
+        apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True)
+        st.write("Texture applies a slightly transparent, noisy layer to the ink for a realistic pen feel.")
+    else:
+        apply_texture = False
+        st.info("🔒 Ink Texture (Realistic Ballpoint Pen effect) requires Premium")
 
 st.header("3. Draw Diagram / Signature (Optional)")
 st.write("Draw something below, and it will be appended to the end of your notes!")

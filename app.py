@@ -14,6 +14,17 @@ from streamlit_drawable_canvas import st_canvas
 
 st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="📝")
 
+# Disable right click and dragging on preview images
+st.markdown("""
+<style>
+    img {
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+    }
+</style>
+""", unsafe_allow_html=True)
+
 # --- RAZORPAY SETUP ---
 try:
     RAZORPAY_KEY_ID = st.secrets.get("RAZORPAY_KEY_ID", "rzp_test_YOUR_KEY_ID_HERE")
@@ -394,24 +405,43 @@ if 'generated_images' in st.session_state and (text_input.strip() or not is_canv
     num_pages = len(images)
     st.success(f"Successfully generated {num_pages} pages!")
     
-    # Display images (Preview)
-    cols = st.columns(min(num_pages, 3) if num_pages > 0 else 1)
-    for i, img in enumerate(images):
-        with cols[i % 3]:
-            st.image(img, caption=f"Page {i+1} Preview", use_container_width=True)
-            
-    st.markdown("---")
-    
-    # Payment Logic
+    # Payment Logic Calculations
     price_per_page = 5 if num_pages <= 10 else 2
     total_price_inr = num_pages * price_per_page
     
-    # Create a unique ID for this exact generation state
     import hashlib
     state_str = text_input + str(font_size) + str(paper_style) + str(messiness) + str(margins) + str(num_pages)
     current_state_id = hashlib.md5(state_str.encode()).hexdigest()
+    is_paid = st.session_state.get('paid_state_id') == current_state_id
     
-    if st.session_state.get('paid_state_id') == current_state_id:
+    def apply_watermark(base_img):
+        watermarked = base_img.copy().convert("RGBA")
+        txt_layer = Image.new('RGBA', watermarked.size, (255, 255, 255, 0))
+        draw = ImageDraw.Draw(txt_layer)
+        width, height = watermarked.size
+        
+        try:
+            watermark_font = load_font(font_choice, 80)
+        except Exception:
+            watermark_font = ImageFont.load_default()
+            
+        for y in range(150, height, 300):
+            for x in range(20, width, 400):
+                draw.text((x, y), "PREVIEW", fill=(255, 0, 0, 100), font=watermark_font)
+        return Image.alpha_composite(watermarked, txt_layer).convert("RGB")
+    
+    # Display images
+    cols = st.columns(min(num_pages, 3) if num_pages > 0 else 1)
+    for i, img in enumerate(images):
+        with cols[i % 3]:
+            if is_paid:
+                st.image(img, caption=f"Page {i+1} (Unlocked)", use_container_width=True)
+            else:
+                st.image(apply_watermark(img), caption=f"Page {i+1} (Watermarked Preview)", use_container_width=True)
+            
+    st.markdown("---")
+    
+    if is_paid:
         st.success("✅ Payment verified for these pages! You can now download them.")
         dl_col1, dl_col2 = st.columns(2)
         

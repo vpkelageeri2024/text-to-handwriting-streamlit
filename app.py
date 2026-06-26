@@ -15,8 +15,14 @@ from streamlit_drawable_canvas import st_canvas
 st.set_page_config(page_title="Text to Handwriting", layout="wide", page_icon="📝")
 
 # --- RAZORPAY SETUP ---
-RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID_HERE"
-RAZORPAY_KEY_SECRET = "YOUR_KEY_SECRET_HERE"
+try:
+    RAZORPAY_KEY_ID = st.secrets.get("RAZORPAY_KEY_ID", "rzp_test_YOUR_KEY_ID_HERE")
+    RAZORPAY_KEY_SECRET = st.secrets.get("RAZORPAY_KEY_SECRET", "YOUR_KEY_SECRET_HERE")
+    APP_URL = st.secrets.get("APP_URL", "http://localhost:8501")
+except Exception:
+    RAZORPAY_KEY_ID = "rzp_test_YOUR_KEY_ID_HERE"
+    RAZORPAY_KEY_SECRET = "YOUR_KEY_SECRET_HERE"
+    APP_URL = "http://localhost:8501"
 
 def create_payment_link():
     try:
@@ -28,7 +34,7 @@ def create_payment_link():
             "customer": {"name": "User", "email": "user@example.com"},
             "notify": {"email": False, "sms": False},
             "reminder_enable": True,
-            "callback_url": "http://localhost:8501/?payment=success",
+            "callback_url": f"{APP_URL.rstrip('/')}/?payment=success",
             "callback_method": "get"
         }
         payment_link = rzp_client.payment_link.create(payment_data)

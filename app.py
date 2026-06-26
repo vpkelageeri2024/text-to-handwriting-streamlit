@@ -134,6 +134,12 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
     width, height = page_size
     margin_top, margin_bottom, margin_left, margin_right = margins
     
+    # Strictly enforce left margins for papers with drawn margin lines
+    if paper_style == "College Ruled":
+        margin_left = max(margin_left, 85)
+    elif paper_style == "Yellow Legal":
+        margin_left = max(margin_left, 110)
+        
     images = []
     lines = text.split('\n')
     line_spacing = int(font_size * line_spacing_factor)
@@ -179,7 +185,7 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
                     if x + char_w > width - margin_right:
                         x = margin_left
                         y += line_spacing
-                        if y > height - margin_bottom:
+                        if y + font_size > height - margin_bottom:
                             add_page()
                             draw = ImageDraw.Draw(text_layer)
                             y = margin_top
@@ -192,7 +198,7 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
             if x + word_w > width - margin_right:
                 x = margin_left
                 y += line_spacing
-                if y > height - margin_bottom:
+                if y + font_size > height - margin_bottom:
                     add_page()
                     draw = ImageDraw.Draw(text_layer)
                     y = margin_top
@@ -205,7 +211,7 @@ def render_handwriting(text, font_obj, font_size, ink_color, paper_style, custom
         
         x = margin_left
         y += line_spacing
-        if y > height - margin_bottom:
+        if y + font_size > height - margin_bottom:
             add_page()
             draw = ImageDraw.Draw(text_layer)
             y = margin_top

@@ -285,55 +285,58 @@ canvas_result = st_canvas(
     key="canvas",
 )
 
-if st.button("Generate Image", use_container_width=True, type="primary"):
-    is_canvas_empty = canvas_result.image_data is None or not np.any(canvas_result.image_data)
-    if not text_input.strip() and is_canvas_empty:
-        st.warning("Please enter some text, upload a file, or draw something.")
-    else:
-        with st.spinner("Generating handwriting..."):
-            # Prepare font
-            if custom_font_file:
-                font_obj = load_custom_font(custom_font_file.getvalue(), font_size)
-            else:
-                font_obj = load_font(font_choice, font_size)
-                
-            # Prepare background
-            custom_bg_bytes = custom_bg_file.getvalue() if custom_bg_file else None
-            
-            page_dims = page_size_options[page_size_choice]
-            
-            images, last_y = render_handwriting(
-                text=text_input, 
-                font_obj=font_obj, 
-                font_size=font_size, 
-                ink_color=ink_color, 
-                paper_style=paper_style, 
-                custom_bg=custom_bg_bytes,
-                messiness=messiness, 
-                margins=margins, 
-                page_size=page_dims, 
-                line_spacing_factor=line_spacing_factor,
-                apply_texture=apply_texture
-            )
-            
-            # Append diagram if drawn
-            if not is_canvas_empty:
-                diagram = Image.fromarray(canvas_result.image_data).convert("RGBA")
-                width, height = page_dims
-                if last_y + 200 > height - margins[1]:
-                    # Does not fit, append as new page
-                    diagram_page = create_background(paper_style, width, height, custom_bg_bytes)
-                    diagram_page.paste(diagram, (margins[2], margins[0]), diagram)
-                    images.append(diagram_page.convert("RGB"))
-                else:
-                    # Fits on the current page, append below text
-                    last_page = images[-1].convert("RGBA")
-                    last_page.paste(diagram, (margins[2], int(last_y) + 20), diagram)
-                    images[-1] = last_page.convert("RGB")
-            
-            st.session_state['generated_images'] = images
+st.markdown("---")
+st.header("4. Live Preview")
 
-if 'generated_images' in st.session_state:
+is_canvas_empty = canvas_result.image_data is None or not np.any(canvas_result.image_data)
+
+if not text_input.strip() and is_canvas_empty:
+    st.info("Start typing, uploading a file, or drawing to see the live preview!")
+else:
+    with st.spinner("Generating Live Preview..."):
+        # Prepare font
+        if custom_font_file:
+            font_obj = load_custom_font(custom_font_file.getvalue(), font_size)
+        else:
+            font_obj = load_font(font_choice, font_size)
+            
+        # Prepare background
+        custom_bg_bytes = custom_bg_file.getvalue() if custom_bg_file else None
+        
+        page_dims = page_size_options[page_size_choice]
+        
+        images, last_y = render_handwriting(
+            text=text_input, 
+            font_obj=font_obj, 
+            font_size=font_size, 
+            ink_color=ink_color, 
+            paper_style=paper_style, 
+            custom_bg=custom_bg_bytes,
+            messiness=messiness, 
+            margins=margins, 
+            page_size=page_dims, 
+            line_spacing_factor=line_spacing_factor,
+            apply_texture=apply_texture
+        )
+        
+        # Append diagram if drawn
+        if not is_canvas_empty:
+            diagram = Image.fromarray(canvas_result.image_data).convert("RGBA")
+            width, height = page_dims
+            if last_y + 200 > height - margins[1]:
+                # Does not fit, append as new page
+                diagram_page = create_background(paper_style, width, height, custom_bg_bytes)
+                diagram_page.paste(diagram, (margins[2], margins[0]), diagram)
+                images.append(diagram_page.convert("RGB"))
+            else:
+                # Fits on the current page, append below text
+                last_page = images[-1].convert("RGBA")
+                last_page.paste(diagram, (margins[2], int(last_y) + 20), diagram)
+                images[-1] = last_page.convert("RGB")
+        
+        st.session_state['generated_images'] = images
+
+if 'generated_images' in st.session_state and (text_input.strip() or not is_canvas_empty):
     images = st.session_state['generated_images']
     st.success(f"Successfully generated {len(images)} pages!")
     

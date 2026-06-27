@@ -1,8 +1,10 @@
 import docx
-import pypdf
+import fitz  # PyMuPDF
 import streamlit as st
+from typing import Any
 
-def extract_text_from_file(uploaded_file):
+def extract_text_from_file(uploaded_file: Any) -> str:
+    """Extracts text from various file formats (.txt, .docx, .pdf)."""
     if uploaded_file is None:
         return ""
         
@@ -17,8 +19,12 @@ def extract_text_from_file(uploaded_file):
             return '\n'.join([para.text for para in doc.paragraphs])
             
         elif name.endswith('.pdf'):
-            reader = pypdf.PdfReader(uploaded_file)
-            return "\n".join([page.extract_text() for page in reader.pages if page.extract_text()])
+            # PyMuPDF is much better at extracting tables, columns, and formatting
+            with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
+                text = []
+                for page in doc:
+                    text.append(page.get_text("text"))
+                return "\n".join(text)
             
     except Exception as e:
         st.error(f"Failed to extract text from {uploaded_file.name}. Error: {e}")

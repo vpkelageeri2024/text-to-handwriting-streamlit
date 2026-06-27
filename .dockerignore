@@ -1,0 +1,9 @@
+__pycache__/
+.git/
+.vscode/
+.github/
+fonts/
+*.pyc
+*.pyo
+.env
+.streamlit/

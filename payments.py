@@ -1,18 +1,18 @@
 import streamlit as st
 import razorpay
+from typing import Tuple, Optional
 
-# Try to get credentials, but don't set dummy ones if they fail.
-# We'll use this to check if payments are enabled.
 try:
-    RAZORPAY_KEY_ID = st.secrets.get("RAZORPAY_KEY_ID")
-    RAZORPAY_KEY_SECRET = st.secrets.get("RAZORPAY_KEY_SECRET")
-    PAYMENTS_ENABLED = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
+    RAZORPAY_KEY_ID: Optional[str] = st.secrets.get("RAZORPAY_KEY_ID")
+    RAZORPAY_KEY_SECRET: Optional[str] = st.secrets.get("RAZORPAY_KEY_SECRET")
+    PAYMENTS_ENABLED: bool = bool(RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET)
 except Exception:
     RAZORPAY_KEY_ID = None
     RAZORPAY_KEY_SECRET = None
     PAYMENTS_ENABLED = False
 
-def create_payment_link(amount_paise, description):
+def create_payment_link(amount_paise: int, description: str) -> Tuple[Optional[str], Optional[str]]:
+    """Generates a Razorpay payment link for unlocking high-res exports."""
     if not PAYMENTS_ENABLED:
         st.error("Payments are currently disabled by the administrator.")
         return None, None
@@ -33,7 +33,8 @@ def create_payment_link(amount_paise, description):
         st.error(f"Razorpay Error: {e}")
         return None, None
 
-def check_payment_status(link_id):
+def check_payment_status(link_id: str) -> bool:
+    """Checks if a given payment link has been successfully paid."""
     if not PAYMENTS_ENABLED:
         return False
         

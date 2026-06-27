@@ -7,6 +7,8 @@ import urllib.request
 import numpy as np
 import streamlit as st
 from PIL import Image, ImageDraw, ImageFont
+from typing import Tuple, List, Optional, Any
+from concurrent.futures import ThreadPoolExecutor
 
 FONT_URLS = {
     "Homemade Apple": "https://github.com/google/fonts/raw/main/apache/homemadeapple/HomemadeApple-Regular.ttf",
@@ -38,7 +40,7 @@ FONT_URLS = {
 }
 
 @st.cache_resource
-def load_font(font_name, size):
+def load_font(font_name: str, size: int) -> Any:
     os.makedirs("fonts", exist_ok=True)
     path = f"fonts/{font_name.replace(' ', '_')}.ttf"
     if not os.path.exists(path):
@@ -57,14 +59,14 @@ def load_font(font_name, size):
         st.error(f"Failed to load font '{font_name}': {e}")
         return ImageFont.load_default()
 
-def load_custom_font(font_bytes, size):
+def load_custom_font(font_bytes: bytes, size: int) -> Any:
     try:
         return ImageFont.truetype(io.BytesIO(font_bytes), size)
     except Exception as e:
         st.error(f"Failed to load custom font: {e}")
         return ImageFont.load_default()
 
-def create_background(style, width, height, custom_bg=None, line_spacing=40, margin_top=100, font_size=30, is_paid=False):
+def create_background(style: str, width: int, height: int, custom_bg: Optional[bytes] = None, line_spacing: int = 40, margin_top: int = 100, font_size: int = 30, is_paid: bool = False) -> Image.Image:
     if custom_bg:
         try:
             img = Image.open(io.BytesIO(custom_bg)).convert("RGBA")
@@ -117,15 +119,35 @@ def create_background(style, width, height, custom_bg=None, line_spacing=40, mar
         
     return img
 
+def process_page(args: Tuple[Image.Image, str, int, int, Optional[bytes], int, int, int, bool, bool]) -> Image.Image:
+    """Helper function to apply background and texture to a rendered text layer in parallel."""
+    text_layer, paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid, apply_texture = args
+    
+    bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid)
+    
+    if apply_texture and is_paid:
+        arr = np.array(text_layer)
+        alpha = arr[:,:,3]
+        mask = alpha > 0
+        if mask.any():
+            noise = np.random.randint(150, 255, size=alpha.shape)
+            arr[:,:,3] = np.where(mask, (alpha.astype(np.float32) * (noise / 255.0)).astype(np.uint8), alpha)
+            text_layer = Image.fromarray(arr, mode="RGBA")
+            
+    out = Image.alpha_composite(bg.convert("RGBA"), text_layer)
+    return out.convert("RGB")
+
 @st.cache_data(show_spinner=False)
-def render_handwriting_cached(text, font_size, ink_color, paper_style, custom_bg, messiness, margins, page_size, line_spacing_factor, apply_texture, is_paid, mistake_prob, font_choice=None, custom_font_bytes=None, max_pages=50):
-    # This wrapper caches the image generation purely by its primitive arguments
-    # Font objects can't be hashed easily, so we instantiate it inside the cached function
+def render_handwriting_cached(text: str, font_size: int, ink_color: str, paper_style: str, custom_bg: Optional[bytes], 
+                              messiness: str, margins: Tuple[int, int, int, int], page_size: Tuple[int, int], 
+                              line_spacing_factor: float, apply_texture: bool, is_paid: bool, mistake_prob: float, 
+                              font_choice: Optional[str] = None, custom_font_bytes: Optional[bytes] = None, 
+                              max_pages: int = 50) -> Tuple[List[Image.Image], float]:
     
     if custom_font_bytes:
         font_obj = load_custom_font(custom_font_bytes, font_size)
     else:
-        font_obj = load_font(font_choice, font_size)
+        font_obj = load_font(font_choice or "Homemade Apple", font_size)
         
     width, height = page_size
     margin_top, margin_bottom, margin_left, margin_right = margins
@@ -135,11 +157,10 @@ def render_handwriting_cached(text, font_size, ink_color, paper_style, custom_bg
     elif paper_style == "Yellow Legal":
         margin_left = max(margin_left, 110)
         
-    images = []
+    raw_text_layers: List[Image.Image] = []
     lines = text.split('\n')
     line_spacing = int(font_size * line_spacing_factor)
     
-    current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid)
     text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
     draw = ImageDraw.Draw(text_layer)
     
@@ -152,29 +173,15 @@ def render_handwriting_cached(text, font_size, ink_color, paper_style, custom_bg
         jitter_amp = 5
 
     def add_page():
-        nonlocal text_layer, current_bg
-        # Only apply computationally expensive texture for Paid final generation, 
-        # or if explicitly enabled, but prevent in live previews to save resources
-        if apply_texture and is_paid:
-            arr = np.array(text_layer)
-            alpha = arr[:,:,3]
-            mask = alpha > 0
-            if mask.any():
-                noise = np.random.randint(150, 255, size=alpha.shape)
-                arr[:,:,3] = np.where(mask, (alpha.astype(np.float32) * (noise / 255.0)).astype(np.uint8), alpha)
-                text_layer = Image.fromarray(arr, mode="RGBA")
-        
-        out = Image.alpha_composite(current_bg.convert("RGBA"), text_layer)
-        images.append(out.convert("RGB"))
-        current_bg = create_background(paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid)
+        nonlocal text_layer, draw
+        raw_text_layers.append(text_layer)
         text_layer = Image.new("RGBA", (width, height), (255, 255, 255, 0))
-        return draw
+        draw = ImageDraw.Draw(text_layer)
 
     h = ink_color.lstrip('#')
     rgb = tuple(int(h[i:i+2], 16) for i in (0, 2, 4))
     
     for line in lines:
-        # Split but preserve spaces to handle wrapping better
         tokens = re.split(r'( +|\n)', line)
         for token in tokens:
             if not token:
@@ -184,27 +191,25 @@ def render_handwriting_cached(text, font_size, ink_color, paper_style, custom_bg
             clean_word = token
             
             if token.strip() and token.startswith('*') and token.endswith('*') and len(token) > 2:
-                current_color = (200, 0, 0) # Teacher Red
+                current_color = (200, 0, 0)
                 clean_word = token[1:-1]
                 
             is_mistake = (random.random() < mistake_prob) if clean_word.strip() else False
             
-            def render_text(w_text, color, cross_out=False):
+            def render_text(w_text: str, color: Tuple[int, int, int], cross_out: bool = False):
                 nonlocal x, y, draw
                 w_w = draw.textlength(w_text, font=font_obj)
                 is_space = (w_text.strip() == "")
                 
-                # Word wrap
                 if x + w_w > width - margin_right:
                     if is_space:
                         return
                     x = margin_left
                     y += line_spacing
                     if y + font_size > height - margin_bottom:
-                        if len(images) >= max_pages - 1:
-                            return # Enforce page limits
+                        if len(raw_text_layers) >= max_pages - 1:
+                            return 
                         add_page()
-                        draw = ImageDraw.Draw(text_layer)
                         y = margin_top
                         
                 if is_space:
@@ -242,21 +247,20 @@ def render_handwriting_cached(text, font_size, ink_color, paper_style, custom_bg
         x = margin_left
         y += line_spacing
         if y + font_size > height - margin_bottom:
-            if len(images) >= max_pages - 1:
+            if len(raw_text_layers) >= max_pages - 1:
                 break
             add_page()
-            draw = ImageDraw.Draw(text_layer)
             y = margin_top
 
-    if apply_texture and is_paid:
-        arr = np.array(text_layer)
-        alpha = arr[:,:,3]
-        mask = alpha > 0
-        if mask.any():
-            noise = np.random.randint(150, 255, size=alpha.shape)
-            arr[:,:,3] = np.where(mask, (alpha.astype(np.float32) * (noise / 255.0)).astype(np.uint8), alpha)
-            text_layer = Image.fromarray(arr, mode="RGBA")
-            
-    out = Image.alpha_composite(current_bg.convert("RGBA"), text_layer)
-    images.append(out.convert("RGB"))
+    raw_text_layers.append(text_layer)
+    
+    # Process backgrounds and textures in parallel using ThreadPoolExecutor
+    args_list = [
+        (layer, paper_style, width, height, custom_bg, line_spacing, margin_top, font_size, is_paid, apply_texture)
+        for layer in raw_text_layers
+    ]
+    
+    with ThreadPoolExecutor() as executor:
+        images = list(executor.map(process_page, args_list))
+        
     return images, y

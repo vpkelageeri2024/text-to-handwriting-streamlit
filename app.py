@@ -202,8 +202,20 @@ if 'generated_images' in st.session_state and (text_input.strip() or not is_canv
     if not PAYMENTS_ENABLED:
         st.warning("⚠️ Payments are currently disabled. You can only view the watermarked preview.")
     else:
+        currency_options = {
+            "INR": "₹",
+            "USD": "$",
+            "EUR": "€",
+            "GBP": "£",
+            "SGD": "S$",
+            "AUD": "A$",
+            "CAD": "C$"
+        }
+        selected_currency = st.selectbox("Select Currency", list(currency_options.keys()), index=0)
+        currency_symbol = currency_options[selected_currency]
+        
         price_per_page = 1
-        total_price_inr = num_pages * price_per_page
+        total_price = num_pages * price_per_page
         
         if is_paid:
             st.success("✅ Payment verified for these pages! You can now download them.")
@@ -225,14 +237,14 @@ if 'generated_images' in st.session_state and (text_input.strip() or not is_canv
                 with dl_col2:
                     st.download_button("Download as PDF", data=pdf_buffer.getvalue(), file_name="handwritten_notes.pdf", mime="application/pdf", use_container_width=True)
         else:
-            st.write(f"### 📥 Download your High-Res Document for ₹{total_price_inr}")
-            st.write(f"*{num_pages} pages at ₹{price_per_page} per page.*")
+            st.write(f"### 📥 Download your High-Res Document for {currency_symbol}{total_price}")
+            st.write(f"*{num_pages} pages at {currency_symbol}{price_per_page} per page.*")
             
             pay_col1, pay_col2 = st.columns([1, 1])
             with pay_col1:
                 if st.button("💳 Generate Secure Payment Link", use_container_width=True):
                     with st.spinner("Connecting to Razorpay..."):
-                        link_id, link_url = create_payment_link(total_price_inr * 100, f"{num_pages} pages of handwriting export")
+                        link_id, link_url = create_payment_link(total_price * 100, f"{num_pages} pages of handwriting export", currency=selected_currency)
                         if link_id:
                             st.session_state['current_payment_link_id'] = link_id
                             st.session_state['current_payment_link_url'] = link_url

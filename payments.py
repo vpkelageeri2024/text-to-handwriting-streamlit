@@ -11,7 +11,7 @@ except Exception:
     RAZORPAY_KEY_SECRET = None
     PAYMENTS_ENABLED = False
 
-def create_payment_link(amount_paise: int, description: str) -> Tuple[Optional[str], Optional[str]]:
+def create_payment_link(amount_paise: int, description: str, currency: str = "INR") -> Tuple[Optional[str], Optional[str]]:
     """Generates a Razorpay payment link for unlocking high-res exports."""
     if not PAYMENTS_ENABLED:
         st.error("Payments are currently disabled by the administrator.")
@@ -21,7 +21,7 @@ def create_payment_link(amount_paise: int, description: str) -> Tuple[Optional[s
         rzp_client = razorpay.Client(auth=(RAZORPAY_KEY_ID, RAZORPAY_KEY_SECRET))
         payment_data = {
             "amount": amount_paise,
-            "currency": "INR",
+            "currency": currency,
             "description": description,
             "customer": {"name": "User", "email": "user@example.com"},
             "notify": {"email": False, "sms": False},

@@ -96,57 +96,104 @@ st.markdown("""
 
 st.markdown("<h1>Text to Handwriting ✨</h1>", unsafe_allow_html=True)
 
-# Wrap settings and input in a form to prevent rendering on every keystroke
-with st.form("handwriting_form"):
-    st.header("1. Input Document or Text")
-    col_upload, col_text = st.columns([1, 1])
+st.header("1. Input Document or Text")
+col_upload, col_text = st.columns([1, 1])
 
-    with col_upload:
-        uploaded_file = st.file_uploader("Upload a document (.txt, .docx, .pdf)", type=["txt", "docx", "pdf"])
-            
-    with col_text:
-        manual_input = st.text_area("Or type/paste your text here...", height=150, placeholder="Write something nice here...")
+with col_upload:
+    uploaded_file = st.file_uploader("Upload a document (.txt, .docx, .pdf)", type=["txt", "docx", "pdf"])
+        
+with col_text:
+    manual_input = st.text_area("Or type/paste your text here...", height=150, placeholder="Write something nice here...")
 
-    st.header("2. Settings & Customizations")
-    tab_basic, tab_layout, tab_advanced = st.tabs(["🖌️ Basic", "📏 Layout", "⚙️ Advanced"])
+st.header("2. Settings & Customizations (Chat Setup)")
 
-    with tab_basic:
-        col1, col2 = st.columns(2)
-        with col1:
-            font_choice = st.selectbox("Handwriting Font", list(FONT_URLS.keys()))
-            custom_font_file = st.file_uploader("Or upload custom font (.ttf, .otf)", type=["ttf", "otf"])
-            font_size = st.number_input("Font Size", min_value=10, max_value=100, value=30, step=2)
-            ink_color = st.color_picker("Ink Color", value="#000f55")
-            
-        with col2:
-            paper_style = st.selectbox("Paper Style", ["Blank", "Ruled", "College Ruled", "Dot Grid", "Yellow Legal", "Graph", "Parchment"])
-            custom_bg_file = st.file_uploader("Or upload custom paper background (.png, .jpg)", type=["png", "jpg", "jpeg"])
-            messiness = st.selectbox("Humanizer (Messiness)", ["Perfect", "Slight Wobble", "Messy Wobble"])
+if 'wizard_step' not in st.session_state:
+    st.session_state.wizard_step = 0
+    st.session_state.chat_history = [
+        {"role": "assistant", "content": "Hi! I'll help you configure your handwriting style. First, please select a **Handwriting Font**."}
+    ]
+    st.session_state.wizard_selections = {
+        "font": "Homemade Apple",
+        "paper": "Blank",
+        "ink_color": "#000f55",
+        "messiness": "Perfect"
+    }
 
-    with tab_layout:
-        col1, col2 = st.columns(2)
-        with col1:
-            page_size_options = {
-                "A4 (800x1131)": (800, 1131),
-                "US Letter (850x1100)": (850, 1100),
-                "A5 (565x800)": (565, 800)
-            }
-            page_size_choice = st.selectbox("Page Size", list(page_size_options.keys()))
-            line_spacing_factor = st.slider("Line Spacing", 1.0, 3.0, 1.5, 0.1)
-        with col2:
-            st.write("Margins")
-            m_top = st.number_input("Top", 0, 500, 100)
-            m_bottom = st.number_input("Bottom", 0, 500, 100)
-            m_left = st.number_input("Left", 0, 500, 50)
-            m_right = st.number_input("Right", 0, 500, 50)
-            margins = (m_top, m_bottom, m_left, m_right)
+for i, msg in enumerate(st.session_state.chat_history):
+    with st.chat_message(msg["role"]):
+        if msg["content"].startswith("#") and len(msg["content"]) == 7:
+            st.markdown(f"<div style='width:30px;height:30px;border-radius:50%;background-color:{msg['content']};border:1px solid #ddd;'></div>", unsafe_allow_html=True)
+        else:
+            st.write(msg["content"])
 
-    with tab_advanced:
-        apply_texture = st.checkbox("Enable Ink Texture (Realistic Ballpoint Pen effect)", value=True, help="Only applies after payment to speed up previews.")
-        mistake_prob = st.slider("Realistic Mistakes Probability", 0.0, 0.1, 0.0, 0.01, help="Simulates human errors by randomly miswriting and crossing out words.")
-        max_pages = st.number_input("Max Pages (Safety Limit)", 1, 100, 50)
+if st.session_state.wizard_step == 0:
+    with st.chat_message("assistant"):
+        font_choice_sel = st.selectbox("Options:", list(FONT_URLS.keys()), key="wizard_font")
+        if st.button("Select Font"):
+            st.session_state.wizard_selections["font"] = font_choice_sel
+            st.session_state.chat_history.append({"role": "user", "content": font_choice_sel})
+            st.session_state.chat_history.append({"role": "assistant", "content": "Great choice! Now, what **Paper Style** do you prefer?"})
+            st.session_state.wizard_step = 1
+            st.rerun()
 
-    # Note: st_canvas cannot be inside a form in Streamlit, so we move it outside.
+elif st.session_state.wizard_step == 1:
+    with st.chat_message("assistant"):
+        paper_choice_sel = st.selectbox("Options:", ["Blank", "Ruled", "College Ruled", "Dot Grid", "Yellow Legal", "Graph", "Parchment"], key="wizard_paper")
+        if st.button("Select Paper"):
+            st.session_state.wizard_selections["paper"] = paper_choice_sel
+            st.session_state.chat_history.append({"role": "user", "content": paper_choice_sel})
+            st.session_state.chat_history.append({"role": "assistant", "content": "Awesome! How about the **Ink Color**?"})
+            st.session_state.wizard_step = 2
+            st.rerun()
+
+elif st.session_state.wizard_step == 2:
+    with st.chat_message("assistant"):
+        ink_color_choice_sel = st.color_picker("Options:", value="#000f55", key="wizard_color")
+        if st.button("Select Color"):
+            st.session_state.wizard_selections["ink_color"] = ink_color_choice_sel
+            st.session_state.chat_history.append({"role": "user", "content": ink_color_choice_sel})
+            st.session_state.chat_history.append({"role": "assistant", "content": "Nice color! Finally, how **Messy** should the handwriting be?"})
+            st.session_state.wizard_step = 3
+            st.rerun()
+
+elif st.session_state.wizard_step == 3:
+    with st.chat_message("assistant"):
+        messy_choice_sel = st.selectbox("Options:", ["Perfect", "Slight Wobble", "Messy Wobble"], key="wizard_messy")
+        if st.button("Select Messiness"):
+            st.session_state.wizard_selections["messiness"] = messy_choice_sel
+            st.session_state.chat_history.append({"role": "user", "content": messy_choice_sel})
+            st.session_state.chat_history.append({"role": "assistant", "content": "All set! You can optionally draw a diagram below, and then click **Generate Handwriting**."})
+            st.session_state.wizard_step = 4
+            st.rerun()
+
+elif st.session_state.wizard_step == 4:
+    if st.button("Start Over (Reset Settings)"):
+        del st.session_state.wizard_step
+        st.rerun()
+
+# Apply the wizard selections and set defaults for advanced options
+font_choice = st.session_state.wizard_selections["font"]
+paper_style = st.session_state.wizard_selections["paper"]
+ink_color = st.session_state.wizard_selections["ink_color"]
+messiness = st.session_state.wizard_selections["messiness"]
+
+# Advanced Defaults
+custom_font_file = None
+custom_bg_file = None
+font_size = 30
+page_size_options = {
+    "A4 (800x1131)": (800, 1131),
+    "US Letter (850x1100)": (850, 1100),
+    "A5 (565x800)": (565, 800)
+}
+page_size_choice = "A4 (800x1131)"
+line_spacing_factor = 1.5
+margins = (100, 100, 50, 50)
+apply_texture = True
+mistake_prob = 0.0
+max_pages = 50
+
+with st.form("generate_form"):
     submitted = st.form_submit_button("🎨 Generate Handwriting", use_container_width=True)
 
 st.header("3. Draw Diagram / Signature (Optional)")

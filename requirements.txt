@@ -5,3 +5,4 @@ python-docx
 pymupdf
 razorpay
 streamlit-drawable-canvas
+opencv-python-headless

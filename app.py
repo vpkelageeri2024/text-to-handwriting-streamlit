@@ -202,7 +202,7 @@ if 'generated_images' in st.session_state and (text_input.strip() or not is_canv
     if not PAYMENTS_ENABLED:
         st.warning("⚠️ Payments are currently disabled. You can only view the watermarked preview.")
     else:
-        price_per_page = 5 if num_pages <= 10 else 2
+        price_per_page = 1
         total_price_inr = num_pages * price_per_page
         
         if is_paid:

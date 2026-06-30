@@ -4,3 +4,4 @@ numpy
 python-docx
 pymupdf
 razorpay
+streamlit-drawable-canvas

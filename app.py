@@ -48,6 +48,40 @@ st.markdown("""
         box-shadow: 0 4px 12px rgba(0,0,0,0.2);
     }
     
+    /* Highlighted Generate Handwriting Button */
+    [data-testid="stFormSubmitButton"] > button {
+        background: linear-gradient(45deg, #ff007f, #ff6b6b, #ff8e53, #ff007f);
+        background-size: 300% auto;
+        color: white !important;
+        border: none;
+        border-radius: 12px;
+        font-size: 1.2rem;
+        font-weight: 800;
+        text-transform: uppercase;
+        letter-spacing: 1.5px;
+        box-shadow: 0 4px 15px rgba(255, 107, 107, 0.5);
+        transition: all 0.3s ease-in-out;
+        animation: gradient-shift 4s ease infinite, pulse-glow 2s infinite;
+    }
+
+    [data-testid="stFormSubmitButton"] > button:hover {
+        background-position: right center;
+        transform: translateY(-3px) scale(1.02);
+        box-shadow: 0 8px 25px rgba(255, 107, 107, 0.8);
+    }
+
+    @keyframes gradient-shift {
+        0% { background-position: 0% 50%; }
+        50% { background-position: 100% 50%; }
+        100% { background-position: 0% 50%; }
+    }
+
+    @keyframes pulse-glow {
+        0% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0.7); }
+        70% { box-shadow: 0 0 0 15px rgba(255, 107, 107, 0); }
+        100% { box-shadow: 0 0 0 0 rgba(255, 107, 107, 0); }
+    }
+    
     /* Card-like containers for form */
     .css-1r6slb0, .css-1y4p8pa {
         padding: 2rem;
